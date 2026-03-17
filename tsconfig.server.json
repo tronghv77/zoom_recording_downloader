@@ -11,6 +11,6 @@
     "outDir": "dist/server",
     "baseUrl": "."
   },
-  "include": ["server/**/*", "src/shared/**/*", "src/services/**/*", "src/database/**/*"],
+  "include": ["server/**/*", "src/shared/**/*", "src/services/**/*", "src/database/**/*", "src/agent/**/*"],
   "exclude": ["node_modules"]
 }

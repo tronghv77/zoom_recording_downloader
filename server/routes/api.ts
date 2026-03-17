@@ -4,6 +4,7 @@ import type { RecordingService } from '../../src/services/RecordingService';
 import type { DownloadService } from '../../src/services/DownloadService';
 import type { SchedulerService } from '../../src/services/SchedulerService';
 import type { SettingsRepository } from '../../src/database/repositories/SettingsRepository';
+import { getAgentList, sendDownloadToAgent } from '../ws';
 
 interface Services {
   accountService: AccountService;
@@ -169,5 +170,112 @@ export function createApiRouter(services: Services): Router {
     });
   }));
 
+  // === Agents ===
+  router.get('/agents', wrap(async (_req, res) => {
+    const data = getAgentList();
+    res.json({ success: true, data });
+  }));
+
+  router.post('/agents/:agentId/download', wrap(async (req, res) => {
+    const { agentId } = req.params;
+    const { recordingFileId } = req.body;
+
+    // Get file info and generate access token
+    const file = await getFileForAgentDownload(services, recordingFileId);
+    if (!file) {
+      res.status(404).json({ success: false, error: 'Recording file not found' });
+      return;
+    }
+
+    const settings = services.settingsRepo.getAll();
+    const sent = sendDownloadToAgent(agentId, {
+      taskId: `agent-${Date.now()}`,
+      downloadUrl: file.downloadUrl,
+      destinationPath: file.destinationPath,
+      accessToken: file.accessToken,
+      fileSize: file.fileSize,
+    });
+
+    if (!sent) {
+      res.status(400).json({ success: false, error: 'Agent not connected or busy' });
+      return;
+    }
+
+    res.json({ success: true, data: { message: `Download sent to agent ${agentId}` } });
+  }));
+
+  // Download all selected files to a specific agent
+  router.post('/agents/:agentId/download-batch', wrap(async (req, res) => {
+    const { agentId } = req.params;
+    const { recordingFileIds } = req.body;
+
+    let sentCount = 0;
+    for (const fileId of recordingFileIds) {
+      const file = await getFileForAgentDownload(services, fileId);
+      if (file) {
+        const sent = sendDownloadToAgent(agentId, {
+          taskId: `agent-${Date.now()}-${sentCount}`,
+          downloadUrl: file.downloadUrl,
+          destinationPath: file.destinationPath,
+          accessToken: file.accessToken,
+          fileSize: file.fileSize,
+        });
+        if (sent) sentCount++;
+      }
+    }
+
+    res.json({ success: true, data: { sent: sentCount, total: recordingFileIds.length } });
+  }));
+
   return router;
+}
+
+// Helper: get file info + access token for agent download
+async function getFileForAgentDownload(services: Services, recordingFileId: string) {
+  try {
+    // Find the recording file
+    const queue = await services.downloadService.getQueue();
+    // We need to get file info from recording
+    const recordings = await services.recordingService.list({ pageSize: 1000 });
+
+    for (const rec of recordings.recordings) {
+      const file = rec.recordingFiles.find((f: any) => f.id === recordingFileId);
+      if (file) {
+        // Get access token for this account
+        const account = await services.accountService.getById(rec.accountId);
+        if (!account) continue;
+
+        const client = services.accountService.createApiClient(account);
+        const token = await client.refreshToken();
+
+        const settings = services.settingsRepo.getAll();
+        const template = settings.folderTemplate || '{topic}';
+        const startTime = new Date(rec.startTime);
+        const timeStr = `${String(startTime.getHours()).padStart(2, '0')}-${String(startTime.getMinutes()).padStart(2, '0')}`;
+
+        const safeTopic = rec.meetingTopic.replace(/[<>:"/\\|?*]/g, '_').trim();
+        const safeAccount = account.name.replace(/[<>:"/\\|?*]/g, '_').trim();
+
+        const folderPath = template
+          .replace('{account}', safeAccount)
+          .replace('{topic}', safeTopic)
+          .replace('{year}', String(startTime.getFullYear()))
+          .replace('{month}', String(startTime.getMonth() + 1).padStart(2, '0'))
+          .replace('{date}', startTime.toISOString().split('T')[0])
+          .replace('{time}', timeStr);
+
+        const destPath = `${folderPath}/${file.fileType}.${file.fileExtension}`;
+
+        return {
+          downloadUrl: file.downloadUrl,
+          destinationPath: destPath,
+          accessToken: token,
+          fileSize: file.fileSize,
+        };
+      }
+    }
+    return null;
+  } catch {
+    return null;
+  }
 }

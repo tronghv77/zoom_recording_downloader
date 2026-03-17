@@ -1,15 +1,14 @@
-// Download Agent — runs on target devices
-// Connects to central server via WebSocket, receives download commands
-
 import WebSocket from 'ws';
 import axios from 'axios';
 import * as fs from 'fs';
 import * as path from 'path';
+import * as os from 'os';
 
 interface AgentConfig {
-  serverUrl: string; // ws://server:3000/ws
+  serverUrl: string;
   deviceName: string;
   downloadPath: string;
+  secret: string;
   maxConcurrent?: number;
 }
 
@@ -25,6 +24,7 @@ export class AgentClient {
   private ws: WebSocket | null = null;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private activeDownloads = new Map<string, AbortController>();
+  private agentId: string | null = null;
 
   constructor(private config: AgentConfig) {}
 
@@ -33,10 +33,12 @@ export class AgentClient {
     this.ws = new WebSocket(this.config.serverUrl);
 
     this.ws.on('open', () => {
-      console.log(`[Agent] Connected as "${this.config.deviceName}"`);
+      console.log(`[Agent] Connected. Registering as "${this.config.deviceName}"...`);
       this.send('agent:register', {
+        id: `agent-${this.config.deviceName.replace(/\s+/g, '-').toLowerCase()}`,
         deviceName: this.config.deviceName,
         downloadPath: this.config.downloadPath,
+        secret: this.config.secret,
       });
     });
 
@@ -48,19 +50,18 @@ export class AgentClient {
     });
 
     this.ws.on('close', () => {
-      console.log('[Agent] Disconnected, reconnecting in 5s...');
+      console.log('[Agent] Disconnected. Reconnecting in 5s...');
       this.reconnectTimer = setTimeout(() => this.connect(), 5000);
     });
 
     this.ws.on('error', (err) => {
-      console.error('[Agent] WebSocket error:', err.message);
+      console.error('[Agent] Error:', err.message);
     });
   }
 
   disconnect(): void {
     if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
     if (this.ws) this.ws.close();
-    // Cancel all active downloads
     for (const [, controller] of this.activeDownloads) {
       controller.abort();
     }
@@ -69,16 +70,27 @@ export class AgentClient {
   private handleMessage(message: { type: string; data: any }): void {
     switch (message.type) {
       case 'agent:registered':
-        console.log(`[Agent] Registered with ID: ${message.data.agentId}`);
+        this.agentId = message.data.agentId;
+        console.log(`[Agent] Registered! ID: ${this.agentId}`);
+        console.log(`[Agent] Download path: ${this.config.downloadPath}`);
+        console.log(`[Agent] Waiting for download commands...`);
         break;
+
+      case 'agent:error':
+        console.error(`[Agent] Server error: ${message.data.message}`);
+        break;
+
       case 'download:start':
+        console.log(`[Agent] Received download command: ${message.data.destinationPath}`);
         this.executeDownload(message.data);
         break;
+
       case 'download:cancel': {
         const controller = this.activeDownloads.get(message.data.taskId);
         if (controller) {
           controller.abort();
           this.activeDownloads.delete(message.data.taskId);
+          console.log(`[Agent] Cancelled: ${message.data.taskId}`);
         }
         break;
       }
@@ -94,7 +106,7 @@ export class AgentClient {
       const dir = path.dirname(destPath);
       fs.mkdirSync(dir, { recursive: true });
 
-      console.log(`[Agent] Downloading: ${cmd.destinationPath}`);
+      console.log(`[Agent] Downloading → ${destPath}`);
 
       const separator = cmd.downloadUrl.includes('?') ? '&' : '?';
       const url = `${cmd.downloadUrl}${separator}access_token=${cmd.accessToken}`;
@@ -103,17 +115,30 @@ export class AgentClient {
         responseType: 'stream',
         signal: controller.signal,
         maxRedirects: 5,
+        timeout: 30000,
       });
 
       const writer = fs.createWriteStream(destPath);
       const totalBytes = Number(response.headers['content-length']) || cmd.fileSize;
       let bytesDownloaded = 0;
       let lastEmit = Date.now();
+      let lastSpeedTime = Date.now();
+      let lastSpeedBytes = 0;
+      let speed = 0;
 
       response.data.on('data', (chunk: Buffer) => {
         bytesDownloaded += chunk.length;
         const now = Date.now();
 
+        // Speed calc
+        const speedElapsed = (now - lastSpeedTime) / 1000;
+        if (speedElapsed >= 1) {
+          speed = (bytesDownloaded - lastSpeedBytes) / speedElapsed;
+          lastSpeedTime = now;
+          lastSpeedBytes = bytesDownloaded;
+        }
+
+        // Progress report (throttled)
         if (now - lastEmit >= 500) {
           lastEmit = now;
           const progress = totalBytes > 0 ? Math.round((bytesDownloaded / totalBytes) * 100) : 0;
@@ -122,6 +147,7 @@ export class AgentClient {
             progress,
             bytesDownloaded,
             totalBytes,
+            speed,
             status: 'downloading',
           });
         }
@@ -130,6 +156,7 @@ export class AgentClient {
       await new Promise<void>((resolve, reject) => {
         writer.on('finish', resolve);
         writer.on('error', reject);
+        response.data.on('error', reject);
         response.data.pipe(writer);
       });
 
@@ -138,6 +165,7 @@ export class AgentClient {
         progress: 100,
         bytesDownloaded: totalBytes,
         totalBytes,
+        speed: 0,
         status: 'completed',
       });
 
@@ -151,12 +179,14 @@ export class AgentClient {
           progress: 0,
           bytesDownloaded: 0,
           totalBytes: cmd.fileSize,
+          speed: 0,
           status: 'failed',
           error: msg,
         });
       }
     } finally {
       this.activeDownloads.delete(cmd.taskId);
+      this.send('agent:status', { currentDownloads: this.activeDownloads.size });
     }
   }
 
@@ -167,22 +197,36 @@ export class AgentClient {
   }
 }
 
-// CLI entry point
+// === CLI Entry Point ===
 if (require.main === module) {
   const args = process.argv.slice(2);
-  const serverUrl = args[0] || 'ws://localhost:3000/ws';
-  const deviceName = args[1] || `Agent-${require('os').hostname()}`;
-  const downloadPath = args[2] || './downloads';
 
-  console.log(`[Agent] Server: ${serverUrl}`);
-  console.log(`[Agent] Device: ${deviceName}`);
-  console.log(`[Agent] Download path: ${downloadPath}`);
+  function getArg(flag: string, defaultValue: string): string {
+    const idx = args.indexOf(flag);
+    return idx >= 0 && args[idx + 1] ? args[idx + 1] : defaultValue;
+  }
 
-  const agent = new AgentClient({ serverUrl, deviceName, downloadPath });
+  const config: AgentConfig = {
+    serverUrl: getArg('--server', 'ws://localhost:3000/ws'),
+    deviceName: getArg('--name', os.hostname()),
+    downloadPath: getArg('--path', path.resolve('./downloads')),
+    secret: getArg('--secret', 'zoom-dl-agent-2026'),
+  };
+
+  console.log('=== Zoom Recording Download Agent ===');
+  console.log(`Server:  ${config.serverUrl}`);
+  console.log(`Device:  ${config.deviceName}`);
+  console.log(`Path:    ${config.downloadPath}`);
+  console.log('');
+
+  // Ensure download path exists
+  fs.mkdirSync(config.downloadPath, { recursive: true });
+
+  const agent = new AgentClient(config);
   agent.connect();
 
   process.on('SIGINT', () => {
-    console.log('[Agent] Shutting down...');
+    console.log('\n[Agent] Shutting down...');
     agent.disconnect();
     process.exit(0);
   });

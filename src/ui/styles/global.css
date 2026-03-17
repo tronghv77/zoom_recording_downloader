@@ -680,6 +680,16 @@ tr:hover td {
   border-bottom: 1px solid var(--border);
 }
 
+.device-picker {
+  padding: 5px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--accent);
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-size: 13px;
+  min-width: 140px;
+}
+
 .file-picker-count {
   font-size: 13px;
   color: var(--text-secondary);

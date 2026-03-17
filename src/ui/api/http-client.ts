@@ -95,6 +95,15 @@ export const httpApi = {
     },
   },
 
+  agents: {
+    list: () => request<any[]>('GET', '/agents'),
+    downloadToAgent: (agentId: string, recordingFileIds: string[]) =>
+      request<any>('POST', `/agents/${agentId}/download-batch`, { recordingFileIds }),
+    onAgentUpdate: (callback: (agents: any[]) => void) => {
+      return onWsEvent('agent:list', callback);
+    },
+  },
+
   scheduler: {
     getConfig: () => request<any>('GET', '/scheduler/config'),
     saveConfig: (config: any) => request<any>('PUT', '/scheduler/config', config),

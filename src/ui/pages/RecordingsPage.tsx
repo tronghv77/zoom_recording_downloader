@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { api } from '../api/client';
+import { api, isWeb } from '../api/client';
 import type { Recording, RecordingFile, ZoomAccount } from '../../shared/types';
 
 export function RecordingsPage() {
@@ -21,6 +21,8 @@ export function RecordingsPage() {
   const [selectedFileIds, setSelectedFileIds] = useState<Set<string>>(new Set());
   const [scheduler, setScheduler] = useState<any>(null);
   const [schedulerBusy, setSchedulerBusy] = useState(false);
+  const [agents, setAgents] = useState<any[]>([]);
+  const [selectedAgent, setSelectedAgent] = useState<string>('server');
 
   const [filter, setFilter] = useState({
     accountId: '',
@@ -34,10 +36,16 @@ export function RecordingsPage() {
     loadRecordings();
     loadScheduler();
 
-    const unsub = api.scheduler.onMessage(() => {
-      loadScheduler();
-    });
-    return () => { unsub(); };
+    const unsubs: Array<() => void> = [];
+    unsubs.push(api.scheduler.onMessage(() => { loadScheduler(); }));
+
+    // Load agents in web mode
+    if (isWeb && (api as any).agents) {
+      (api as any).agents.list().then(setAgents).catch(() => {});
+      unsubs.push((api as any).agents.onAgentUpdate((list: any[]) => setAgents(list)));
+    }
+
+    return () => { unsubs.forEach((u) => u()); };
   }, []);
 
   async function loadScheduler() {
@@ -179,10 +187,18 @@ export function RecordingsPage() {
     const fileIds = recording.recordingFiles.filter((f) => selectedFileIds.has(f.id)).map((f) => f.id);
     if (fileIds.length === 0) return;
     try {
-      const dir = await getDownloadDir();
-      if (!dir) return;
-      await api.download.enqueue(fileIds, { destinationDir: dir });
-      setSyncResult(`Added ${fileIds.length} file(s) to download queue`);
+      if (selectedAgent !== 'server' && isWeb && (api as any).agents) {
+        // Download to remote agent
+        const result = await (api as any).agents.downloadToAgent(selectedAgent, fileIds);
+        const agentName = agents.find((a) => a.id === selectedAgent)?.deviceName || selectedAgent;
+        setSyncResult(`Sent ${result.sent} file(s) to "${agentName}"`);
+      } else {
+        // Download to server (local)
+        const dir = await getDownloadDir();
+        if (!dir) return;
+        await api.download.enqueue(fileIds, { destinationDir: dir });
+        setSyncResult(`Added ${fileIds.length} file(s) to download queue`);
+      }
       setDownloadPickerId(null);
     } catch (err: any) {
       setError(err.message || 'Failed to enqueue download');
@@ -466,12 +482,29 @@ export function RecordingsPage() {
                         <button className="btn btn-sm" onClick={selectNoneFiles}>Select None</button>
                         <span className="file-picker-count">{selectedFileIds.size} / {rec.recordingFiles.length} selected</span>
                         <div style={{ flex: 1 }} />
+                        {isWeb && agents.length > 0 && (
+                          <select
+                            className="device-picker"
+                            value={selectedAgent}
+                            onChange={(e) => setSelectedAgent(e.target.value)}
+                          >
+                            <option value="server">Server (local)</option>
+                            {agents.map((a) => (
+                              <option key={a.id} value={a.id}>
+                                {a.deviceName} ({a.status})
+                              </option>
+                            ))}
+                          </select>
+                        )}
                         <button
                           className="btn btn-sm btn-primary"
                           onClick={() => handleDownloadSelected(rec)}
                           disabled={selectedFileIds.size === 0}
                         >
                           Download {selectedFileIds.size} file(s)
+                          {selectedAgent !== 'server' && agents.length > 0
+                            ? ` → ${agents.find((a) => a.id === selectedAgent)?.deviceName || ''}`
+                            : ''}
                         </button>
                         <button className="btn btn-sm" onClick={() => setDownloadPickerId(null)}>Cancel</button>
                       </div>

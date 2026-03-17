@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(taskkill /F /IM node.exe)",
+      "Bash(node -e \"const path = require\\(''path''\\); const d = path.join\\(__dirname, ''dist/server/server''\\); console.log\\(''__dirname would be:'', d\\); console.log\\(''../../.. ='', path.join\\(d, ''../../../dist/renderer''\\)\\); console.log\\(''exists?'', require\\(''fs''\\).existsSync\\(path.join\\(d, ''../../../dist/renderer/index.html''\\)\\)\\)\")",
+      "Bash(node -e \":*)",
+      "Bash(cmd.exe /c \"for /f \"\"tokens=5\"\" %a in \\(''netstat -aon ^| findstr :3000 ^| findstr LISTENING''\\) do taskkill /F /PID %a\")",
+      "Bash(npx electron-builder:*)",
+      "Bash(CSC_IDENTITY_AUTO_DISCOVERY=false npx electron-builder --win portable --config.win.signAndEditExecutable=false)"
+    ]
+  }
+}
