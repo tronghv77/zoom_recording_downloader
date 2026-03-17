@@ -1,0 +1,7 @@
+node_modules
+.git
+.claude
+release
+*.db
+*.sqlite
+.env.local
