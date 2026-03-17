@@ -62,8 +62,15 @@ async function main() {
   app.use('/api', createApiRouter(services));
 
   // Serve static web UI (built by vite)
-  // __dirname = dist/server/server/, so go up 3 levels to project root
-  const webUiPath = path.join(__dirname, '../../../dist/renderer');
+  // Try multiple paths for compatibility (local dev vs Railway)
+  const possiblePaths = [
+    path.join(__dirname, '../../../dist/renderer'),  // local: dist/server/server/ → project root
+    path.join(__dirname, '../../dist/renderer'),      // Railway may flatten
+    path.join(process.cwd(), 'dist/renderer'),        // from CWD
+  ];
+  const fs = require('fs');
+  const webUiPath = possiblePaths.find((p) => fs.existsSync(path.join(p, 'index.html'))) || possiblePaths[2];
+  console.log(`[Server] Serving UI from: ${webUiPath}`);
   app.use(express.static(webUiPath));
   app.get('/{*path}', (_req, res) => {
     res.sendFile(path.join(webUiPath, 'index.html'));
@@ -95,10 +102,11 @@ async function main() {
     });
   });
 
-  server.listen(PORT, () => {
-    console.log(`[Server] Running at http://localhost:${PORT}`);
-    console.log(`[Server] WebSocket at ws://localhost:${PORT}/ws`);
-    console.log(`[Server] API at http://localhost:${PORT}/api`);
+  const HOST = '0.0.0.0';
+  server.listen(PORT, HOST, () => {
+    console.log(`[Server] Running at http://${HOST}:${PORT}`);
+    console.log(`[Server] WebSocket at ws://${HOST}:${PORT}/ws`);
+    console.log(`[Server] API at http://${HOST}:${PORT}/api`);
   });
 
   // Graceful shutdown
