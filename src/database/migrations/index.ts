@@ -1,13 +1,15 @@
-import Database from 'better-sqlite3';
+import { Database as SqlJsDatabase } from 'sql.js';
 import { up as migration001 } from './001_initial';
+import { up as migration002 } from './002_recording_uuid';
 
 const migrations = [
   { version: 1, name: '001_initial', up: migration001 },
+  { version: 2, name: '002_recording_uuid', up: migration002 },
 ];
 
-export function runMigrations(db: Database.Database): void {
+export function runMigrations(db: SqlJsDatabase): void {
   // Create migrations tracking table
-  db.exec(`
+  db.run(`
     CREATE TABLE IF NOT EXISTS _migrations (
       version INTEGER PRIMARY KEY,
       name TEXT NOT NULL,
@@ -15,20 +17,18 @@ export function runMigrations(db: Database.Database): void {
     );
   `);
 
-  const applied = db
-    .prepare('SELECT version FROM _migrations ORDER BY version')
-    .all() as { version: number }[];
-  const appliedVersions = new Set(applied.map((m) => m.version));
+  const result = db.exec('SELECT version FROM _migrations ORDER BY version');
+  const appliedVersions = new Set(
+    result.length > 0 ? result[0].values.map((row) => row[0] as number) : [],
+  );
 
   for (const migration of migrations) {
     if (!appliedVersions.has(migration.version)) {
-      db.transaction(() => {
-        migration.up(db);
-        db.prepare('INSERT INTO _migrations (version, name) VALUES (?, ?)').run(
-          migration.version,
-          migration.name,
-        );
-      })();
+      migration.up(db);
+      db.run('INSERT INTO _migrations (version, name) VALUES (?, ?)', [
+        migration.version,
+        migration.name,
+      ]);
       console.log(`Migration applied: ${migration.name}`);
     }
   }

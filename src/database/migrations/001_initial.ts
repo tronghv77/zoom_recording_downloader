@@ -1,7 +1,7 @@
-import Database from 'better-sqlite3';
+import { Database as SqlJsDatabase } from 'sql.js';
 
-export function up(db: Database.Database): void {
-  db.exec(`
+export function up(db: SqlJsDatabase): void {
+  db.run(`
     CREATE TABLE IF NOT EXISTS accounts (
       id TEXT PRIMARY KEY,
       name TEXT NOT NULL,
@@ -15,7 +15,9 @@ export function up(db: Database.Database): void {
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       updated_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
+  `);
 
+  db.run(`
     CREATE TABLE IF NOT EXISTS recordings (
       id TEXT PRIMARY KEY,
       account_id TEXT NOT NULL,
@@ -29,7 +31,9 @@ export function up(db: Database.Database): void {
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       FOREIGN KEY (account_id) REFERENCES accounts(id) ON DELETE CASCADE
     );
+  `);
 
+  db.run(`
     CREATE TABLE IF NOT EXISTS recording_files (
       id TEXT PRIMARY KEY,
       recording_id TEXT NOT NULL,
@@ -41,7 +45,9 @@ export function up(db: Database.Database): void {
       status TEXT NOT NULL DEFAULT 'available',
       FOREIGN KEY (recording_id) REFERENCES recordings(id) ON DELETE CASCADE
     );
+  `);
 
+  db.run(`
     CREATE TABLE IF NOT EXISTS download_tasks (
       id TEXT PRIMARY KEY,
       recording_file_id TEXT NOT NULL,
@@ -64,7 +70,9 @@ export function up(db: Database.Database): void {
       FOREIGN KEY (recording_file_id) REFERENCES recording_files(id),
       FOREIGN KEY (recording_id) REFERENCES recordings(id)
     );
+  `);
 
+  db.run(`
     CREATE TABLE IF NOT EXISTS schedule_rules (
       id TEXT PRIMARY KEY,
       account_id TEXT NOT NULL,
@@ -78,10 +86,10 @@ export function up(db: Database.Database): void {
       next_run_at TEXT,
       FOREIGN KEY (account_id) REFERENCES accounts(id) ON DELETE CASCADE
     );
-
-    CREATE INDEX IF NOT EXISTS idx_recordings_account ON recordings(account_id);
-    CREATE INDEX IF NOT EXISTS idx_recordings_start_time ON recordings(start_time);
-    CREATE INDEX IF NOT EXISTS idx_recording_files_recording ON recording_files(recording_id);
-    CREATE INDEX IF NOT EXISTS idx_download_tasks_status ON download_tasks(status);
   `);
+
+  db.run('CREATE INDEX IF NOT EXISTS idx_recordings_account ON recordings(account_id);');
+  db.run('CREATE INDEX IF NOT EXISTS idx_recordings_start_time ON recordings(start_time);');
+  db.run('CREATE INDEX IF NOT EXISTS idx_recording_files_recording ON recording_files(recording_id);');
+  db.run('CREATE INDEX IF NOT EXISTS idx_download_tasks_status ON download_tasks(status);');
 }

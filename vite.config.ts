@@ -13,6 +13,7 @@ export default defineConfig({
     },
   },
   root: '.',
+  base: './',
   build: {
     outDir: 'dist/renderer',
   },

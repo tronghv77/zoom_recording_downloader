@@ -20,11 +20,11 @@ export class DownloadService implements IDownloadService {
     private accountService: AccountService,
   ) {}
 
-  async enqueue(recordingFileIds: string[], options: DownloadOptions): Promise<DownloadTask[]> {
+  async enqueue(recordingFileIds: string[], options: DownloadOptions, folderTemplate?: string): Promise<DownloadTask[]> {
     const tasks: DownloadTask[] = [];
 
     for (const fileId of recordingFileIds) {
-      const task = this.downloadRepo.createTask(fileId, options);
+      const task = this.downloadRepo.createTask(fileId, options, folderTemplate);
       tasks.push(task);
     }
 
@@ -38,7 +38,7 @@ export class DownloadService implements IDownloadService {
     if (!task) throw new Error(`Download task not found: ${taskId}`);
 
     this.downloadRepo.updateStatus(taskId, 'downloading');
-    await this.executeDownload(task);
+    this.executeDownload(task);
   }
 
   async pause(taskId: string): Promise<void> {
@@ -48,12 +48,10 @@ export class DownloadService implements IDownloadService {
       this.activeDownloads.delete(taskId);
     }
     this.downloadRepo.updateStatus(taskId, 'paused');
+    this.emitProgress({ taskId, progress: 0, bytesDownloaded: 0, totalBytes: 0, speed: 0, status: 'paused' });
   }
 
   async resume(taskId: string): Promise<void> {
-    const task = this.downloadRepo.findById(taskId);
-    if (!task) throw new Error(`Download task not found: ${taskId}`);
-
     this.downloadRepo.updateStatus(taskId, 'queued');
     this.processQueue();
   }
@@ -65,6 +63,7 @@ export class DownloadService implements IDownloadService {
       this.activeDownloads.delete(taskId);
     }
     this.downloadRepo.updateStatus(taskId, 'cancelled');
+    this.emitProgress({ taskId, progress: 0, bytesDownloaded: 0, totalBytes: 0, speed: 0, status: 'cancelled' });
   }
 
   async retry(taskId: string): Promise<void> {
@@ -104,7 +103,7 @@ export class DownloadService implements IDownloadService {
     }
   }
 
-  private async processQueue(): Promise<void> {
+  private processQueue(): void {
     if (this.activeDownloads.size >= this.maxConcurrent) return;
 
     const queuedTasks = this.downloadRepo.findByStatus('queued');
@@ -124,8 +123,8 @@ export class DownloadService implements IDownloadService {
       const dir = path.dirname(task.destinationPath);
       fs.mkdirSync(dir, { recursive: true });
 
-      // Get fresh download URL with token
-      const recording = await this.recordingRepo.findById(task.recordingId);
+      // Get fresh access token
+      const recording = this.recordingRepo.findById(task.recordingId);
       if (!recording) throw new Error('Recording not found');
 
       const account = await this.accountService.getById(recording.accountId);
@@ -133,50 +132,64 @@ export class DownloadService implements IDownloadService {
 
       const client = this.accountService.createApiClient(account);
       const token = await client.refreshToken();
-      const downloadUrl = `${task.downloadUrl}?access_token=${token}`;
+
+      // Zoom download URL needs access_token as query param
+      const separator = task.downloadUrl.includes('?') ? '&' : '?';
+      const downloadUrl = `${task.downloadUrl}${separator}access_token=${token}`;
 
       const response = await axios.get(downloadUrl, {
         responseType: 'stream',
         signal: controller.signal,
+        maxRedirects: 5,
+        timeout: 30000,
       });
 
       const writer = fs.createWriteStream(task.destinationPath);
-      const totalBytes = task.fileSize;
+      const totalBytes = Number(response.headers['content-length']) || task.fileSize;
       let bytesDownloaded = 0;
-      let lastTime = Date.now();
-      let lastBytes = 0;
+      let lastEmitTime = Date.now();
+      let lastSpeedTime = Date.now();
+      let lastSpeedBytes = 0;
+      let currentSpeed = 0;
 
       response.data.on('data', (chunk: Buffer) => {
         bytesDownloaded += chunk.length;
-        const now = Date.now();
-        const elapsed = (now - lastTime) / 1000;
 
-        let speed = 0;
-        if (elapsed >= 1) {
-          speed = (bytesDownloaded - lastBytes) / elapsed;
-          lastTime = now;
-          lastBytes = bytesDownloaded;
+        const now = Date.now();
+
+        // Calculate speed every second
+        const speedElapsed = (now - lastSpeedTime) / 1000;
+        if (speedElapsed >= 1) {
+          currentSpeed = (bytesDownloaded - lastSpeedBytes) / speedElapsed;
+          lastSpeedTime = now;
+          lastSpeedBytes = bytesDownloaded;
         }
 
-        const progress = totalBytes > 0 ? Math.round((bytesDownloaded / totalBytes) * 100) : 0;
+        // Throttle progress events to max ~4 per second
+        if (now - lastEmitTime >= 250) {
+          lastEmitTime = now;
+          const progress = totalBytes > 0 ? Math.round((bytesDownloaded / totalBytes) * 100) : 0;
 
-        this.downloadRepo.updateProgress(task.id, progress, bytesDownloaded, speed);
-        this.emitProgress({
-          taskId: task.id,
-          progress,
-          bytesDownloaded,
-          totalBytes,
-          speed,
-          status: 'downloading',
-        });
+          this.downloadRepo.updateProgress(task.id, progress, bytesDownloaded, currentSpeed);
+          this.emitProgress({
+            taskId: task.id,
+            progress,
+            bytesDownloaded,
+            totalBytes,
+            speed: currentSpeed,
+            status: 'downloading',
+          });
+        }
       });
 
       await new Promise<void>((resolve, reject) => {
         writer.on('finish', resolve);
         writer.on('error', reject);
+        response.data.on('error', reject);
         response.data.pipe(writer);
       });
 
+      this.downloadRepo.updateProgress(task.id, 100, totalBytes, 0);
       this.downloadRepo.updateStatus(task.id, 'completed');
       this.activeDownloads.delete(task.id);
       this.emitProgress({
@@ -188,15 +201,25 @@ export class DownloadService implements IDownloadService {
         status: 'completed',
       });
 
-      // Process next in queue
       this.processQueue();
     } catch (error: unknown) {
       this.activeDownloads.delete(task.id);
 
-      if (axios.isCancel(error)) return; // User cancelled
+      if (axios.isCancel(error)) {
+        this.processQueue();
+        return;
+      }
 
       const message = error instanceof Error ? error.message : 'Unknown error';
       this.downloadRepo.updateError(task.id, message);
+      this.emitProgress({
+        taskId: task.id,
+        progress: 0,
+        bytesDownloaded: 0,
+        totalBytes: task.fileSize,
+        speed: 0,
+        status: 'failed',
+      });
       this.processQueue();
     }
   }

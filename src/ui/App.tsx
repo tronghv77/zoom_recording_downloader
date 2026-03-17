@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { HashRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { Layout } from './components/Layout';
 import { DashboardPage } from './pages/DashboardPage';
@@ -8,6 +8,20 @@ import { DownloadsPage } from './pages/DownloadsPage';
 import { SettingsPage } from './pages/SettingsPage';
 
 export function App() {
+  useEffect(() => {
+    // Load theme from settings on startup
+    async function loadTheme() {
+      try {
+        const settings = await (window as any).api.settings.getAll();
+        const theme = settings.theme || 'dark';
+        document.documentElement.setAttribute('data-theme', theme);
+      } catch {
+        document.documentElement.setAttribute('data-theme', 'dark');
+      }
+    }
+    loadTheme();
+  }, []);
+
   return (
     <HashRouter>
       <Layout>

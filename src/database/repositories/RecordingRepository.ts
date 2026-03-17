@@ -1,4 +1,4 @@
-import Database from 'better-sqlite3';
+import { Database as SqlJsDatabase } from 'sql.js';
 import { randomUUID } from 'crypto';
 import {
   Recording,
@@ -7,24 +7,39 @@ import {
   RecordingListResult,
   RecordingStatus,
 } from '../../shared/types';
+import { saveDatabase } from '../connection';
 
 export class RecordingRepository {
-  constructor(private db: Database.Database) {}
+  constructor(private db: SqlJsDatabase) {}
 
   findById(id: string): Recording | null {
-    const row = this.db.prepare('SELECT * FROM recordings WHERE id = ?').get(id) as any;
-    if (!row) return null;
-
+    const stmt = this.db.prepare('SELECT * FROM recordings WHERE id = ?');
+    stmt.bind([id]);
+    if (!stmt.step()) { stmt.free(); return null; }
+    const row = stmt.getAsObject();
+    stmt.free();
     const files = this.findFilesByRecordingId(id);
-    return this.mapRow(row, files);
+    return this.mapObject(row, files);
   }
 
   findByMeetingId(meetingId: string): Recording | null {
-    const row = this.db.prepare('SELECT * FROM recordings WHERE meeting_id = ?').get(meetingId) as any;
-    if (!row) return null;
+    const stmt = this.db.prepare('SELECT * FROM recordings WHERE meeting_id = ? OR uuid = ?');
+    stmt.bind([meetingId, meetingId]);
+    if (!stmt.step()) { stmt.free(); return null; }
+    const row = stmt.getAsObject();
+    stmt.free();
+    const files = this.findFilesByRecordingId(row.id as string);
+    return this.mapObject(row, files);
+  }
 
-    const files = this.findFilesByRecordingId(row.id);
-    return this.mapRow(row, files);
+  findByUuid(uuid: string): Recording | null {
+    const stmt = this.db.prepare('SELECT * FROM recordings WHERE uuid = ?');
+    stmt.bind([uuid]);
+    if (!stmt.step()) { stmt.free(); return null; }
+    const row = stmt.getAsObject();
+    stmt.free();
+    const files = this.findFilesByRecordingId(row.id as string);
+    return this.mapObject(row, files);
   }
 
   findByFilter(filter: RecordingFilter): RecordingListResult {
@@ -32,24 +47,27 @@ export class RecordingRepository {
     const params: any[] = [];
 
     if (filter.accountId) {
-      conditions.push('r.account_id = ?');
+      conditions.push('account_id = ?');
       params.push(filter.accountId);
     }
     if (filter.from) {
-      conditions.push('r.start_time >= ?');
+      conditions.push('start_time >= ?');
       params.push(filter.from);
     }
     if (filter.to) {
-      conditions.push('r.start_time <= ?');
+      conditions.push('start_time <= ?');
       params.push(filter.to);
     }
     if (filter.search) {
-      conditions.push('r.meeting_topic LIKE ?');
+      conditions.push('meeting_topic LIKE ?');
       params.push(`%${filter.search}%`);
     }
     if (filter.status) {
-      conditions.push('r.status = ?');
+      conditions.push('status = ?');
       params.push(filter.status);
+    } else {
+      // By default, hide deleted recordings
+      conditions.push("status != 'deleted'");
     }
 
     const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
@@ -57,56 +75,54 @@ export class RecordingRepository {
     const pageSize = filter.pageSize || 20;
     const offset = (page - 1) * pageSize;
 
-    const countRow = this.db
-      .prepare(`SELECT COUNT(*) as count FROM recordings r ${where}`)
-      .get(...params) as any;
+    // Count total
+    const countResult = this.db.exec(`SELECT COUNT(*) as count FROM recordings ${where}`, params);
+    const totalCount = countResult.length > 0 ? (countResult[0].values[0][0] as number) : 0;
 
-    const rows = this.db
-      .prepare(
-        `SELECT r.* FROM recordings r ${where} ORDER BY r.start_time DESC LIMIT ? OFFSET ?`,
-      )
-      .all(...params, pageSize, offset) as any[];
+    // Fetch page
+    const dataResult = this.db.exec(
+      `SELECT * FROM recordings ${where} ORDER BY start_time DESC LIMIT ? OFFSET ?`,
+      [...params, pageSize, offset],
+    );
 
-    const recordings = rows.map((row) => {
-      const files = this.findFilesByRecordingId(row.id);
-      return this.mapRow(row, files);
-    });
+    let recordings: Recording[] = [];
+    if (dataResult.length > 0) {
+      recordings = dataResult[0].values.map((values) => {
+        const row: Record<string, any> = {};
+        dataResult[0].columns.forEach((col, i) => { row[col] = values[i]; });
+        const files = this.findFilesByRecordingId(row.id as string);
+        return this.mapObject(row, files);
+      });
+    }
 
-    return {
-      recordings,
-      totalCount: countRow.count,
-      page,
-      pageSize,
-    };
+    return { recordings, totalCount, page, pageSize };
   }
 
   createFromZoomData(accountId: string, meetingData: any): Recording {
     const recordingId = randomUUID();
+    const uuid = String(meetingData.uuid || meetingData.id);
 
-    this.db
-      .prepare(
-        `INSERT INTO recordings (id, account_id, meeting_id, meeting_topic, host_email, start_time, duration, total_size)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-      )
-      .run(
+    this.db.run(
+      `INSERT INTO recordings (id, account_id, meeting_id, uuid, meeting_topic, host_email, start_time, duration, total_size)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
         recordingId,
         accountId,
         String(meetingData.id),
+        uuid,
         meetingData.topic || 'Untitled',
         meetingData.host_email || '',
         meetingData.start_time || new Date().toISOString(),
         meetingData.duration || 0,
         meetingData.total_size || 0,
-      );
+      ],
+    );
 
-    // Insert recording files
     for (const file of meetingData.recording_files || []) {
-      this.db
-        .prepare(
-          `INSERT INTO recording_files (id, recording_id, file_type, file_extension, file_size, download_url, play_url)
-           VALUES (?, ?, ?, ?, ?, ?, ?)`,
-        )
-        .run(
+      this.db.run(
+        `INSERT INTO recording_files (id, recording_id, file_type, file_extension, file_size, download_url, play_url)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        [
           randomUUID(),
           recordingId,
           file.recording_type || 'unknown',
@@ -114,45 +130,77 @@ export class RecordingRepository {
           file.file_size || 0,
           file.download_url || '',
           file.play_url || null,
-        );
+        ],
+      );
     }
 
+    saveDatabase();
     return this.findById(recordingId)!;
   }
 
   updateStatus(id: string, status: RecordingStatus): void {
-    this.db.prepare('UPDATE recordings SET status = ? WHERE id = ?').run(status, id);
+    this.db.run('UPDATE recordings SET status = ? WHERE id = ?', [status, id]);
+    saveDatabase();
+  }
+
+  updateTopic(id: string, topic: string): void {
+    this.db.run('UPDATE recordings SET meeting_topic = ? WHERE id = ?', [topic, id]);
+    saveDatabase();
+  }
+
+  clearAll(accountId?: string): number {
+    let count = 0;
+    if (accountId) {
+      const result = this.db.exec('SELECT COUNT(*) FROM recordings WHERE account_id = ?', [accountId]);
+      count = result.length > 0 ? (result[0].values[0][0] as number) : 0;
+      this.db.run('DELETE FROM recording_files WHERE recording_id IN (SELECT id FROM recordings WHERE account_id = ?)', [accountId]);
+      this.db.run('DELETE FROM recordings WHERE account_id = ?', [accountId]);
+    } else {
+      const result = this.db.exec('SELECT COUNT(*) FROM recordings');
+      count = result.length > 0 ? (result[0].values[0][0] as number) : 0;
+      this.db.run('DELETE FROM recording_files');
+      this.db.run('DELETE FROM recordings');
+    }
+    saveDatabase();
+    return count;
   }
 
   private findFilesByRecordingId(recordingId: string): RecordingFile[] {
-    const rows = this.db
-      .prepare('SELECT * FROM recording_files WHERE recording_id = ?')
-      .all(recordingId) as any[];
+    const result = this.db.exec(
+      'SELECT * FROM recording_files WHERE recording_id = ?',
+      [recordingId],
+    );
+    if (result.length === 0) return [];
 
-    return rows.map((row) => ({
-      id: row.id,
-      recordingId: row.recording_id,
-      fileType: row.file_type,
-      fileExtension: row.file_extension,
-      fileSize: row.file_size,
-      downloadUrl: row.download_url,
-      playUrl: row.play_url || undefined,
-      status: row.status,
-    }));
+    return result[0].values.map((values) => {
+      const row: Record<string, any> = {};
+      result[0].columns.forEach((col, i) => { row[col] = values[i]; });
+      return {
+        id: row.id as string,
+        recordingId: row.recording_id as string,
+        fileType: row.file_type as string,
+        fileExtension: row.file_extension as string,
+        fileSize: row.file_size as number,
+        downloadUrl: row.download_url as string,
+        playUrl: (row.play_url as string) || undefined,
+        status: row.status as string,
+      } as RecordingFile;
+    });
   }
 
-  private mapRow(row: any, files: RecordingFile[]): Recording {
+  private mapObject(row: Record<string, any>, files: RecordingFile[]): Recording {
     return {
-      id: row.id,
-      accountId: row.account_id,
-      meetingId: row.meeting_id,
-      meetingTopic: row.meeting_topic,
-      hostEmail: row.host_email,
-      startTime: row.start_time,
-      duration: row.duration,
-      totalSize: row.total_size,
+      id: row.id as string,
+      accountId: row.account_id as string,
+      meetingId: row.meeting_id as string,
+      uuid: (row.uuid as string) || (row.meeting_id as string),
+      meetingTopic: row.meeting_topic as string,
+      hostEmail: row.host_email as string,
+      startTime: row.start_time as string,
+      duration: row.duration as number,
+      totalSize: row.total_size as number,
       recordingFiles: files,
-      status: row.status,
-    };
+      status: row.status as string,
+    } as Recording;
   }
 }

@@ -89,8 +89,22 @@ export class ZoomApiClient {
     return response.data.download_url;
   }
 
-  async deleteRecording(meetingId: string): Promise<void> {
-    await this.httpClient.delete(`/meetings/${meetingId}/recordings`);
+  async deleteRecording(meetingId: string, permanent = false): Promise<void> {
+    // Zoom UUIDs starting with / or containing // need double-encoding
+    const encodedId = meetingId.startsWith('/') || meetingId.includes('//')
+      ? encodeURIComponent(encodeURIComponent(meetingId))
+      : encodeURIComponent(meetingId);
+
+    const params: Record<string, string> = {};
+    if (permanent) {
+      params.action = 'delete'; // permanently delete, not just trash
+    }
+    // Default action = 'trash' (move to trash)
+    await this.httpClient.delete(`/meetings/${encodedId}/recordings`, { params });
+  }
+
+  async updateMeetingTopic(meetingId: string, topic: string): Promise<void> {
+    await this.httpClient.patch(`/meetings/${meetingId}`, { topic });
   }
 
   getAccessToken(): string | null {

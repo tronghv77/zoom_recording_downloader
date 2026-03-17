@@ -1,29 +1,34 @@
-import Database from 'better-sqlite3';
+import { Database as SqlJsDatabase } from 'sql.js';
 import { randomUUID } from 'crypto';
 import { ZoomAccount, AccountStatus, CreateAccountInput, UpdateAccountInput } from '../../shared/types';
+import { saveDatabase } from '../connection';
 
 export class AccountRepository {
-  constructor(private db: Database.Database) {}
+  constructor(private db: SqlJsDatabase) {}
 
   findAll(): ZoomAccount[] {
-    const rows = this.db.prepare('SELECT * FROM accounts ORDER BY name').all() as any[];
-    return rows.map(this.mapRow);
+    const result = this.db.exec('SELECT * FROM accounts ORDER BY name');
+    if (result.length === 0) return [];
+    return result[0].values.map((row) => this.mapRow(result[0].columns, row));
   }
 
   findById(id: string): ZoomAccount | null {
-    const row = this.db.prepare('SELECT * FROM accounts WHERE id = ?').get(id) as any;
-    return row ? this.mapRow(row) : null;
+    const stmt = this.db.prepare('SELECT * FROM accounts WHERE id = ?');
+    stmt.bind([id]);
+    if (!stmt.step()) { stmt.free(); return null; }
+    const row = stmt.getAsObject();
+    stmt.free();
+    return this.mapObject(row);
   }
 
   create(input: CreateAccountInput): ZoomAccount {
     const id = randomUUID();
-    this.db
-      .prepare(
-        `INSERT INTO accounts (id, name, email, client_id, client_secret, account_id)
-         VALUES (?, ?, ?, ?, ?, ?)`,
-      )
-      .run(id, input.name, input.email, input.clientId, input.clientSecret, input.accountId);
-
+    this.db.run(
+      `INSERT INTO accounts (id, name, email, client_id, client_secret, account_id)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      [id, input.name, input.email, input.clientId, input.clientSecret, input.accountId],
+    );
+    saveDatabase();
     return this.findById(id)!;
   }
 
@@ -41,40 +46,49 @@ export class AccountRepository {
     fields.push("updated_at = datetime('now')");
     values.push(id);
 
-    this.db.prepare(`UPDATE accounts SET ${fields.join(', ')} WHERE id = ?`).run(...values);
+    this.db.run(`UPDATE accounts SET ${fields.join(', ')} WHERE id = ?`, values);
+    saveDatabase();
     return this.findById(id)!;
   }
 
   delete(id: string): void {
-    this.db.prepare('DELETE FROM accounts WHERE id = ?').run(id);
+    this.db.run('DELETE FROM accounts WHERE id = ?', [id]);
+    saveDatabase();
   }
 
   updateStatus(id: string, status: AccountStatus): ZoomAccount {
-    this.db
-      .prepare("UPDATE accounts SET status = ?, updated_at = datetime('now') WHERE id = ?")
-      .run(status, id);
+    this.db.run("UPDATE accounts SET status = ?, updated_at = datetime('now') WHERE id = ?", [status, id]);
+    saveDatabase();
     return this.findById(id)!;
   }
 
   updateToken(id: string, accessToken: string, expiresAt: number): void {
-    this.db
-      .prepare("UPDATE accounts SET access_token = ?, token_expires_at = ?, updated_at = datetime('now') WHERE id = ?")
-      .run(accessToken, expiresAt, id);
+    this.db.run(
+      "UPDATE accounts SET access_token = ?, token_expires_at = ?, updated_at = datetime('now') WHERE id = ?",
+      [accessToken, expiresAt, id],
+    );
+    saveDatabase();
   }
 
-  private mapRow(row: any): ZoomAccount {
+  private mapObject(row: Record<string, any>): ZoomAccount {
     return {
-      id: row.id,
-      name: row.name,
-      email: row.email,
-      clientId: row.client_id,
-      clientSecret: row.client_secret,
-      accountId: row.account_id,
-      accessToken: row.access_token || undefined,
-      tokenExpiresAt: row.token_expires_at || undefined,
-      status: row.status,
-      createdAt: row.created_at,
-      updatedAt: row.updated_at,
+      id: row.id as string,
+      name: row.name as string,
+      email: row.email as string,
+      clientId: row.client_id as string,
+      clientSecret: row.client_secret as string,
+      accountId: row.account_id as string,
+      accessToken: (row.access_token as string) || undefined,
+      tokenExpiresAt: (row.token_expires_at as number) || undefined,
+      status: row.status as AccountStatus,
+      createdAt: row.created_at as string,
+      updatedAt: row.updated_at as string,
     };
+  }
+
+  private mapRow(columns: string[], values: any[]): ZoomAccount {
+    const row: Record<string, any> = {};
+    columns.forEach((col, i) => { row[col] = values[i]; });
+    return this.mapObject(row);
   }
 }

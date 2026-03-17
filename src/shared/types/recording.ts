@@ -2,6 +2,7 @@ export interface Recording {
   id: string;
   accountId: string;
   meetingId: string;
+  uuid: string;
   meetingTopic: string;
   hostEmail: string;
   startTime: string;
