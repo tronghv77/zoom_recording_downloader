@@ -12,6 +12,7 @@
     "build:server": "tsc -p tsconfig.server.json",
     "start:server": "tsc -p tsconfig.server.json && vite build && node dist/server/server/index.js",
     "dev:server": "tsc -p tsconfig.server.json && concurrently \"vite\" \"node dist/server/server/index.js\"",
+    "dist": "tsc -p tsconfig.electron.json && vite build && electron-builder --win",
     "preview": "vite preview",
     "lint": "eslint src/ electron/ server/",
     "typecheck": "tsc --noEmit"
@@ -55,7 +56,36 @@
       "output": "release"
     },
     "files": [
-      "dist/**/*"
-    ]
+      "dist/electron/**/*",
+      "dist/renderer/**/*",
+      "node_modules/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "node_modules/sql.js/dist/sql-wasm.wasm",
+        "to": "sql-wasm.wasm"
+      }
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": ["x64"]
+        },
+        {
+          "target": "portable",
+          "arch": ["x64"]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "installerSidebar": null
+    },
+    "portable": {
+      "artifactName": "ZoomRecordingDownloader-portable.exe"
+    }
   }
 }
