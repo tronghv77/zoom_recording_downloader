@@ -9,7 +9,14 @@ async function request<T>(method: string, path: string, body?: any): Promise<T> 
     method,
     headers: body ? { 'Content-Type': 'application/json' } : undefined,
     body: body ? JSON.stringify(body) : undefined,
+    credentials: 'include',
   });
+
+  // Redirect to login if unauthorized
+  if (res.status === 401) {
+    window.location.reload();
+    throw new Error('Session expired');
+  }
 
   const result = await res.json();
   if (!result.success) throw new Error(result.error || 'Request failed');

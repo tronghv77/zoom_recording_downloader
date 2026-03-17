@@ -15,6 +15,7 @@ import { DownloadService } from '../src/services/DownloadService';
 import { SchedulerService } from '../src/services/SchedulerService';
 import { createApiRouter } from './routes/api';
 import { setupWebSocket } from './ws';
+import { sessionMiddleware, requireAuth, createAuthRouter } from './auth';
 
 const PORT = process.env.PORT ? Number(process.env.PORT) : 3000;
 
@@ -47,8 +48,15 @@ async function main() {
 
   // Create Express app
   const app = express();
-  app.use(cors());
+  app.use(cors({ origin: true, credentials: true }));
   app.use(express.json());
+  app.use(sessionMiddleware);
+
+  // Auth routes (login/logout/status) — no auth required
+  app.use('/api/auth', createAuthRouter());
+
+  // Protect all other API routes
+  app.use(requireAuth);
 
   // API routes
   app.use('/api', createApiRouter(services));
