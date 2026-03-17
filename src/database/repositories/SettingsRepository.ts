@@ -13,7 +13,7 @@ export interface AppSettings {
 const DEFAULTS: AppSettings = {
   defaultDownloadDir: '',
   maxConcurrentDownloads: 3,
-  folderTemplate: '{account}/{year}-{month}/{topic}',
+  folderTemplate: '{account}/{year}-{month}/{date} {time} - {topic}',
   autoStartDownload: true,
   minimizeToTray: false,
   theme: 'dark',
