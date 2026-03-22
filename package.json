@@ -1,6 +1,6 @@
 {
   "name": "zoom-recording-downloader",
-  "version": "0.3.0",
+  "version": "1.0.0",
   "description": "Hybrid desktop app for managing and downloading Zoom Cloud recordings across multiple accounts and devices",
   "main": "dist/electron/electron/main.js",
   "scripts": {
