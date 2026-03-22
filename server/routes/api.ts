@@ -215,19 +215,29 @@ export function createApiRouter(services: Services): Router {
   router.post('/agents/:agentId/download-batch', wrap(async (req, res) => {
     const { agentId } = req.params;
     const { recordingFileIds } = req.body;
+    const settings = services.settingsRepo.getAll();
 
     let sentCount = 0;
     for (const fileId of recordingFileIds) {
       const file = await getFileForAgentDownload(services, fileId);
       if (file) {
+        // Create download task in DB to track on Downloads page
+        const task = services.downloadRepo.createTask(fileId, {
+          destinationDir: `[Agent] ${agentId}`,
+          agentId,
+        }, settings.folderTemplate);
+
         const sent = sendDownloadToAgent(agentId, {
-          taskId: `agent-${Date.now()}-${sentCount}`,
+          taskId: task.id,
           downloadUrl: file.downloadUrl,
           destinationPath: file.destinationPath,
           accessToken: file.accessToken,
           fileSize: file.fileSize,
         });
-        if (sent) sentCount++;
+        if (sent) {
+          services.downloadRepo.updateStatus(task.id, 'downloading');
+          sentCount++;
+        }
       }
     }
 

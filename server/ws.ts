@@ -3,12 +3,14 @@ import type { AccountService } from '../src/services/AccountService';
 import type { DownloadService } from '../src/services/DownloadService';
 import type { SchedulerService } from '../src/services/SchedulerService';
 import type { SettingsRepository } from '../src/database/repositories/SettingsRepository';
+import type { DownloadRepository } from '../src/database/repositories/DownloadRepository';
 
 interface Services {
   accountService: AccountService;
   downloadService: DownloadService;
   schedulerService: SchedulerService;
   settingsRepo: SettingsRepository;
+  downloadRepo: DownloadRepository;
   [key: string]: any;
 }
 
@@ -80,17 +82,32 @@ export function setupWebSocket(wss: WebSocketServer, services: Services): void {
           // Forward to all web clients
           broadcastToWebClients(wss, { type: 'download:progress', data: message.data });
 
+          // Update download task in DB
+          const taskId = message.data.taskId;
+          if (taskId) {
+            try {
+              if (message.data.status === 'downloading') {
+                services.downloadRepo.updateProgress(
+                  taskId,
+                  message.data.progress || 0,
+                  message.data.bytesDownloaded || 0,
+                  message.data.speed || 0,
+                );
+              } else if (message.data.status === 'completed') {
+                services.downloadRepo.updateProgress(taskId, 100, message.data.totalBytes || 0, 0);
+                services.downloadRepo.updateStatus(taskId, 'completed');
+              } else if (message.data.status === 'failed') {
+                services.downloadRepo.updateError(taskId, message.data.error || 'Download failed');
+              }
+            } catch {}
+          }
+
           // Update agent status
           if (agentId && connectedAgents.has(agentId)) {
             const agent = connectedAgents.get(agentId)!;
             if (message.data.status === 'completed' || message.data.status === 'failed') {
               agent.currentDownloads = Math.max(0, agent.currentDownloads - 1);
               agent.status = agent.currentDownloads > 0 ? 'busy' : 'online';
-            }
-
-            // Also update download task in DB
-            if (message.data.status === 'completed') {
-              services.downloadService.getQueue().then(() => {}); // trigger DB save
             }
           }
           break;
