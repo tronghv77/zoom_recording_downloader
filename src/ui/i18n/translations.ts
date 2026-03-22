@@ -140,6 +140,15 @@ export const translations = {
   'settings.saved': { vi: 'Đã lưu cài đặt!', en: 'Settings saved!' },
   'settings.browse': { vi: 'Chọn Thư Mục', en: 'Browse' },
   'settings.minimizeToTray': { vi: 'Thu nhỏ xuống khay hệ thống', en: 'Minimize to system tray' },
+  'settings.update': { vi: 'Cập Nhật', en: 'Update' },
+  'settings.checkUpdate': { vi: 'Kiểm Tra Cập Nhật', en: 'Check for Updates' },
+  'settings.checking': { vi: 'Đang kiểm tra...', en: 'Checking...' },
+  'settings.updateAvailable': { vi: 'Có phiên bản mới', en: 'New version available' },
+  'settings.upToDate': { vi: 'Bạn đang sử dụng phiên bản mới nhất', en: 'You are using the latest version' },
+  'settings.currentVersion': { vi: 'Phiên bản hiện tại', en: 'Current version' },
+  'settings.latestVersion': { vi: 'Phiên bản mới nhất', en: 'Latest version' },
+  'settings.downloadUpdate': { vi: 'Tải bản cập nhật', en: 'Download update' },
+  'settings.updateError': { vi: 'Không thể kiểm tra cập nhật', en: 'Unable to check for updates' },
 
   // === Guide ===
   'guide.title': { vi: 'Hướng Dẫn Sử Dụng', en: 'User Guide' },

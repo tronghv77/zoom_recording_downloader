@@ -32,16 +32,44 @@ export function SettingsPage() {
   const [schedulerStatus, setSchedulerStatus] = useState<any>(null);
   const [runningNow, setRunningNow] = useState(false);
   const [schedulerLogs, setSchedulerLogs] = useState<string[]>([]);
+  const [updateInfo, setUpdateInfo] = useState<{ hasUpdate: boolean; latestVersion: string; currentVersion: string; downloadUrl: string } | null>(null);
+  const [checkingUpdate, setCheckingUpdate] = useState(false);
 
   useEffect(() => {
     loadSettings();
     loadScheduler();
+    checkForUpdate(); // Auto-check on page load
 
     const unsub = api.scheduler.onMessage((msg: string) => {
       setSchedulerLogs((prev) => [...prev.slice(-19), msg]);
     });
     return () => { unsub(); };
   }, []);
+
+  async function checkForUpdate() {
+    try {
+      setCheckingUpdate(true);
+      const res = await fetch('https://api.github.com/repos/tronghv77/zoom_recording_downloader/releases/latest', {
+        headers: { 'User-Agent': 'ZoomDL' },
+      });
+      const data = await res.json();
+      const latestVersion = (data.tag_name || '').replace(/^v/, '');
+      const currentVersion = '1.0.0';
+      const exeAsset = data.assets?.find((a: any) => a.name.includes('Setup'));
+      const downloadUrl = exeAsset?.browser_download_url || data.html_url || '';
+
+      const parse = (v: string) => v.split('.').map(Number);
+      const [lM, lm = 0, lp = 0] = parse(latestVersion);
+      const [cM, cm = 0, cp = 0] = parse(currentVersion);
+      const hasUpdate = lM > cM || (lM === cM && lm > cm) || (lM === cM && lm === cm && lp > cp);
+
+      setUpdateInfo({ hasUpdate, latestVersion, currentVersion, downloadUrl });
+    } catch {
+      setUpdateInfo(null);
+    } finally {
+      setCheckingUpdate(false);
+    }
+  }
 
   async function loadScheduler() {
     try {
@@ -321,6 +349,42 @@ export function SettingsPage() {
             <option value="true">Yes</option>
           </select>
         </div>
+      </div>
+
+      <div className="settings-section">
+        <div className="section-header">
+          <h3>{t('settings.update')}</h3>
+          <button className="btn btn-sm" onClick={checkForUpdate} disabled={checkingUpdate}>
+            {checkingUpdate ? t('settings.checking') : t('settings.checkUpdate')}
+          </button>
+        </div>
+
+        {updateInfo && (
+          <div className={`update-status ${updateInfo.hasUpdate ? 'update-available' : 'update-current'}`}>
+            <div className="update-version-row">
+              <span>{t('settings.currentVersion')}: <strong>v{updateInfo.currentVersion}</strong></span>
+              <span>{t('settings.latestVersion')}: <strong>v{updateInfo.latestVersion}</strong></span>
+            </div>
+            {updateInfo.hasUpdate ? (
+              <div className="update-action">
+                <span className="update-badge update-new">✨ {t('settings.updateAvailable')}: v{updateInfo.latestVersion}</span>
+                {updateInfo.downloadUrl && (
+                  <a href={updateInfo.downloadUrl} target="_blank" rel="noopener noreferrer" className="btn btn-sm btn-primary">
+                    {t('settings.downloadUpdate')}
+                  </a>
+                )}
+              </div>
+            ) : (
+              <div className="update-action">
+                <span className="update-badge update-ok">✅ {t('settings.upToDate')}</span>
+              </div>
+            )}
+          </div>
+        )}
+
+        {!updateInfo && !checkingUpdate && (
+          <div className="stat-sub">{t('settings.updateError')}</div>
+        )}
       </div>
     </div>
   );

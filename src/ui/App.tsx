@@ -14,6 +14,7 @@ import { I18nProvider } from './i18n';
 export function App() {
   const [authenticated, setAuthenticated] = useState(isWeb ? false : true);
   const [checking, setChecking] = useState(isWeb);
+  const [updateBanner, setUpdateBanner] = useState<{ version: string; url: string } | null>(null);
 
   useEffect(() => {
     // Load theme
@@ -47,6 +48,20 @@ export function App() {
     } else {
       loadTheme();
     }
+
+    // Auto-check for updates (silent, non-blocking)
+    fetch('https://api.github.com/repos/tronghv77/zoom_recording_downloader/releases/latest', {
+      headers: { 'User-Agent': 'ZoomDL' },
+    }).then(r => r.json()).then(data => {
+      const latest = (data.tag_name || '').replace(/^v/, '');
+      const current = '1.0.0';
+      const [lM, lm = 0, lp = 0] = latest.split('.').map(Number);
+      const [cM, cm = 0, cp = 0] = current.split('.').map(Number);
+      if (lM > cM || (lM === cM && lm > cm) || (lM === cM && lm === cm && lp > cp)) {
+        const exe = data.assets?.find((a: any) => a.name.includes('Setup'));
+        setUpdateBanner({ version: latest, url: exe?.browser_download_url || data.html_url || '' });
+      }
+    }).catch(() => {});
   }, []);
 
   function handleLogin() {
@@ -69,6 +84,13 @@ export function App() {
     <I18nProvider>
       <HashRouter>
         <Layout>
+          {updateBanner && (
+            <div className="update-banner-top">
+              <span>✨ Phiên bản mới <strong>v{updateBanner.version}</strong> đã sẵn sàng!</span>
+              <a href={updateBanner.url} target="_blank" rel="noopener noreferrer" className="btn btn-sm">Tải về</a>
+              <button className="update-banner-close" onClick={() => setUpdateBanner(null)}>×</button>
+            </div>
+          )}
           <Routes>
             <Route path="/" element={<Navigate to="/dashboard" replace />} />
             <Route path="/dashboard" element={<DashboardPage />} />
