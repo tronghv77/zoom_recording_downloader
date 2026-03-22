@@ -386,6 +386,41 @@ export function SettingsPage() {
           <div className="stat-sub">{t('settings.updateError')}</div>
         )}
       </div>
+
+      <div className="settings-section about-section">
+        <h3>{t('about.title')}</h3>
+
+        <div className="about-app">
+          <div className="about-app-name">Zoom Recording Downloader</div>
+          <div className="about-app-version">v1.0.0</div>
+          <p className="about-app-desc">{t('about.description')}</p>
+        </div>
+
+        <div className="about-developer">
+          <h4>{t('about.developer')}</h4>
+          <div className="about-info-grid">
+            <div className="about-info-item">
+              <span className="about-label">{t('about.author')}</span>
+              <span className="about-value">Hồ Văn Trọng</span>
+            </div>
+            <div className="about-info-item">
+              <span className="about-label">{t('about.email')}</span>
+              <a href="mailto:tronghv77@gmail.com" className="about-value about-link">tronghv77@gmail.com</a>
+            </div>
+            <div className="about-info-item">
+              <span className="about-label">{t('about.phone')}</span>
+              <a href="tel:0936099625" className="about-value about-link">0936 099 625</a>
+            </div>
+          </div>
+        </div>
+
+        <div className="about-links">
+          <h4>{t('about.source')}</h4>
+          <a href="https://github.com/tronghv77/zoom_recording_downloader" target="_blank" rel="noopener noreferrer" className="about-github-link">
+            GitHub — tronghv77/zoom_recording_downloader
+          </a>
+        </div>
+      </div>
     </div>
   );
 }

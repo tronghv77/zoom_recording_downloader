@@ -150,6 +150,17 @@ export const translations = {
   'settings.downloadUpdate': { vi: 'Tải bản cập nhật', en: 'Download update' },
   'settings.updateError': { vi: 'Không thể kiểm tra cập nhật', en: 'Unable to check for updates' },
 
+  // === About ===
+  'about.title': { vi: 'Giới Thiệu', en: 'About' },
+  'about.appName': { vi: 'Zoom Recording Downloader', en: 'Zoom Recording Downloader' },
+  'about.description': { vi: 'Ứng dụng quản lý và tải file ghi hình từ Zoom Cloud cho nhiều tài khoản và nhiều thiết bị. Hỗ trợ tải hàng loạt, tự động đồng bộ, điều khiển từ xa qua Download Agent.', en: 'Manage and download Zoom Cloud recordings across multiple accounts and devices. Supports batch download, auto-sync, and remote control via Download Agent.' },
+  'about.developer': { vi: 'Nhà Phát Triển', en: 'Developer' },
+  'about.author': { vi: 'Tác giả', en: 'Author' },
+  'about.email': { vi: 'Email', en: 'Email' },
+  'about.phone': { vi: 'Điện thoại', en: 'Phone' },
+  'about.source': { vi: 'Mã nguồn & Tải về', en: 'Source & Download' },
+  'about.version': { vi: 'Phiên bản', en: 'Version' },
+
   // === Guide ===
   'guide.title': { vi: 'Hướng Dẫn Sử Dụng', en: 'User Guide' },
   'guide.overview': { vi: 'Tổng Quan', en: 'Overview' },
