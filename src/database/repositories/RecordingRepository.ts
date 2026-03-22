@@ -153,11 +153,15 @@ export class RecordingRepository {
     if (accountId) {
       const result = this.db.exec('SELECT COUNT(*) FROM recordings WHERE account_id = ?', [accountId]);
       count = result.length > 0 ? (result[0].values[0][0] as number) : 0;
+      // Delete download_tasks first (foreign key to recording_files)
+      this.db.run('DELETE FROM download_tasks WHERE recording_id IN (SELECT id FROM recordings WHERE account_id = ?)', [accountId]);
       this.db.run('DELETE FROM recording_files WHERE recording_id IN (SELECT id FROM recordings WHERE account_id = ?)', [accountId]);
       this.db.run('DELETE FROM recordings WHERE account_id = ?', [accountId]);
     } else {
       const result = this.db.exec('SELECT COUNT(*) FROM recordings');
       count = result.length > 0 ? (result[0].values[0][0] as number) : 0;
+      // Delete download_tasks first (foreign key to recording_files)
+      this.db.run('DELETE FROM download_tasks');
       this.db.run('DELETE FROM recording_files');
       this.db.run('DELETE FROM recordings');
     }
