@@ -207,10 +207,10 @@ if (require.main === module) {
   }
 
   const config: AgentConfig = {
-    serverUrl: getArg('--server', 'ws://localhost:3000/ws'),
+    serverUrl: getArg('--server', 'wss://zoomrecordingdownloader-production.up.railway.app/ws'),
     deviceName: getArg('--name', os.hostname()),
     downloadPath: getArg('--path', path.resolve('./downloads')),
-    secret: getArg('--secret', 'zoom-dl-agent-2026'),
+    secret: getArg('--secret', 'HoVanTrong@3773'),
   };
 
   console.log('=== Zoom Recording Download Agent ===');
