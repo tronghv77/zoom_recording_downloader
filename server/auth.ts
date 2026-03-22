@@ -1,14 +1,33 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import session from 'express-session';
+import * as path from 'path';
+import * as fs from 'fs';
 
 // Default credentials — change via environment variables
 const ADMIN_USERNAME = process.env.ADMIN_USERNAME || 'admin';
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'zoomdl2026';
 const SESSION_SECRET = process.env.SESSION_SECRET || 'zoom-dl-session-secret-2026';
 
+// File-based session store (production-safe, no memory leak)
+let store: session.Store | undefined;
+try {
+  const FileStore = require('session-file-store')(session);
+  const sessionDir = path.resolve(process.cwd(), 'data', 'sessions');
+  fs.mkdirSync(sessionDir, { recursive: true });
+  store = new FileStore({
+    path: sessionDir,
+    ttl: 7 * 24 * 60 * 60, // 7 days in seconds
+    retries: 0,
+    logFn: () => {}, // suppress logs
+  });
+} catch {
+  console.warn('[Auth] session-file-store not available, using MemoryStore');
+}
+
 // Session middleware
 export const sessionMiddleware = session({
   secret: SESSION_SECRET,
+  store,
   resave: false,
   saveUninitialized: false,
   cookie: {

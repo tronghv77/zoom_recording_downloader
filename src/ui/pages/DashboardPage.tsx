@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { api } from '../api/client';
+import { api, isWeb } from '../api/client';
 import type { ZoomAccount, DownloadTask } from '../../shared/types';
 
 export function DashboardPage() {
@@ -8,6 +8,7 @@ export function DashboardPage() {
   const [recordingCount, setRecordingCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [schedulerStatus, setSchedulerStatus] = useState<any>(null);
+  const [agents, setAgents] = useState<any[]>([]);
 
   useEffect(() => {
     async function load() {
@@ -27,10 +28,18 @@ export function DashboardPage() {
     }
     load();
 
-    const unsub = api.download.onProgress(() => {
+    const unsubs: Array<() => void> = [];
+    unsubs.push(api.download.onProgress(() => {
       api.download.getQueue().then(setDownloadQueue);
-    });
-    return () => { unsub(); };
+    }));
+
+    // Load agents in web mode
+    if (isWeb && (api as any).agents) {
+      (api as any).agents.list().then(setAgents).catch(() => {});
+      unsubs.push((api as any).agents.onAgentUpdate((list: any[]) => setAgents(list)));
+    }
+
+    return () => { unsubs.forEach((u) => u()); };
   }, []);
 
   const activeAccounts = accounts.filter((a) => a.status === 'active');
@@ -85,6 +94,45 @@ export function DashboardPage() {
           <div className="stat-sub" style={{ marginTop: 8 }}>
             {schedulerStatus.isRunning ? 'Auto-syncing recordings on schedule' : 'Go to Settings to enable auto-sync'}
           </div>
+        </div>
+      )}
+
+      {isWeb && (
+        <div className="settings-section" style={{ marginBottom: 16 }}>
+          <div className="section-header">
+            <h3>Connected Devices</h3>
+            <span className="stat-sub">{agents.length} agent(s)</span>
+          </div>
+          {agents.length === 0 ? (
+            <div className="empty-state" style={{ padding: '12px 0' }}>
+              No download agents connected. Run ZoomAgent.exe on target devices.
+            </div>
+          ) : (
+            <table>
+              <thead>
+                <tr>
+                  <th>Device</th>
+                  <th>Status</th>
+                  <th>Downloads</th>
+                  <th>Connected</th>
+                </tr>
+              </thead>
+              <tbody>
+                {agents.map((a: any) => (
+                  <tr key={a.id}>
+                    <td><strong>{a.deviceName}</strong></td>
+                    <td>
+                      <span className={`status-badge status-${a.status === 'online' ? 'active' : a.status === 'busy' ? 'downloading' : 'failed'}`}>
+                        {a.status === 'online' ? '🟢 Online' : a.status === 'busy' ? '🟡 Busy' : '⚫ Offline'}
+                      </span>
+                    </td>
+                    <td>{a.currentDownloads || 0} active</td>
+                    <td>{a.connectedAt ? new Date(a.connectedAt).toLocaleString() : '-'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
         </div>
       )}
 

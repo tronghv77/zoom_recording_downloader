@@ -126,6 +126,9 @@ export function DownloadsPage() {
                   <div className="recording-title">{group.meetingTopic}</div>
                   <div className="recording-meta">
                     {group.tasks.length} files &middot; {formatSize(group.totalSize)}
+                    {group.tasks[0]?.agentId && (
+                      <> &middot; 📱 {group.tasks[0].agentId.replace('agent-', '')}</>
+                    )}
                     {status === 'downloading' && speed > 0 && <> &middot; {formatSize(speed)}/s</>}
                     {status === 'downloading' && speed > 0 && group.totalSize > group.downloadedSize && (
                       <> &middot; {formatEta(group.totalSize - group.downloadedSize, speed)}</>

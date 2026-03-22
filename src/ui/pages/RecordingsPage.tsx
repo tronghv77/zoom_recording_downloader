@@ -482,19 +482,24 @@ export function RecordingsPage() {
                         <button className="btn btn-sm" onClick={selectNoneFiles}>Select None</button>
                         <span className="file-picker-count">{selectedFileIds.size} / {rec.recordingFiles.length} selected</span>
                         <div style={{ flex: 1 }} />
-                        {isWeb && agents.length > 0 && (
-                          <select
-                            className="device-picker"
-                            value={selectedAgent}
-                            onChange={(e) => setSelectedAgent(e.target.value)}
-                          >
-                            <option value="server">Server (local)</option>
-                            {agents.map((a) => (
-                              <option key={a.id} value={a.id}>
-                                {a.deviceName} ({a.status})
-                              </option>
-                            ))}
-                          </select>
+                        {isWeb && (
+                          <div className="device-selector">
+                            <select
+                              className="device-picker"
+                              value={selectedAgent}
+                              onChange={(e) => setSelectedAgent(e.target.value)}
+                            >
+                              <option value="server">💻 Server (local)</option>
+                              {agents.map((a) => (
+                                <option key={a.id} value={a.id}>
+                                  {a.status === 'online' ? '🟢' : a.status === 'busy' ? '🟡' : '⚫'} {a.deviceName}
+                                </option>
+                              ))}
+                            </select>
+                            {agents.length === 0 && (
+                              <span className="device-hint">No agents connected</span>
+                            )}
+                          </div>
                         )}
                         <button
                           className="btn btn-sm btn-primary"
