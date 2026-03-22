@@ -73,7 +73,8 @@ export class DownloadRepository {
       .replace('{date}', vn.date)
       .replace('{time}', vn.time);
 
-    const destinationPath = `${options.destinationDir}/${folderPath}/${safeType}.${ext}`;
+    const datePrefix = `${vn.date.split('-').reverse().join('_')}`;
+    const destinationPath = `${options.destinationDir}/${folderPath}/${datePrefix} ${safeType}.${ext}`;
 
     this.db.run(
       `INSERT INTO download_tasks

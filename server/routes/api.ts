@@ -289,7 +289,8 @@ async function getFileForAgentDownload(services: Services, recordingFileId: stri
           .replace('{date}', vnDate)
           .replace('{time}', vnTime);
 
-        const destPath = `${folderPath}/${file.fileType}.${file.fileExtension}`;
+        const datePrefix = `${vnDay}_${vnMonth}_${vnYear}`;
+        const destPath = `${folderPath}/${datePrefix} ${file.fileType}.${file.fileExtension}`;
 
         return {
           downloadUrl: file.downloadUrl,
