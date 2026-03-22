@@ -2,7 +2,7 @@
 // Mirrors the same interface as IPC client (electron preload)
 
 const BASE_URL = window.location.origin;
-const WS_URL = `ws://${window.location.host}/ws`;
+const WS_URL = `${window.location.protocol === 'https:' ? 'wss' : 'ws'}://${window.location.host}/ws`;
 
 async function request<T>(method: string, path: string, body?: any): Promise<T> {
   const res = await fetch(`${BASE_URL}/api${path}`, {

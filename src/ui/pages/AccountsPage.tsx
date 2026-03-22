@@ -237,6 +237,17 @@ function AccountForm({ account, onSaved, onCancel }: AccountFormProps) {
         </div>
       </div>
 
+      <div className="form-group">
+        <label>Account ID (Server-to-Server OAuth)</label>
+        <input
+          value={form.accountId}
+          onChange={(e) => updateField('accountId', e.target.value)}
+          placeholder="From Zoom App > General > Account ID"
+          required
+        />
+        <small>Found in Zoom Marketplace → Your App → App Credentials</small>
+      </div>
+
       <div className="form-row">
         <div className="form-group">
           <label>Client ID</label>
@@ -257,17 +268,6 @@ function AccountForm({ account, onSaved, onCancel }: AccountFormProps) {
             required={!isEdit}
           />
         </div>
-      </div>
-
-      <div className="form-group">
-        <label>Account ID (Server-to-Server OAuth)</label>
-        <input
-          value={form.accountId}
-          onChange={(e) => updateField('accountId', e.target.value)}
-          placeholder="From Zoom App > General > Account ID"
-          required
-        />
-        <small>Found in Zoom Marketplace → Your App → App Credentials</small>
       </div>
 
       <div className="form-actions">
