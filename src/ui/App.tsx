@@ -6,6 +6,7 @@ import { AccountsPage } from './pages/AccountsPage';
 import { RecordingsPage } from './pages/RecordingsPage';
 import { DownloadsPage } from './pages/DownloadsPage';
 import { SettingsPage } from './pages/SettingsPage';
+import { GuidePage } from './pages/GuidePage';
 import { LoginPage } from './pages/LoginPage';
 import { isWeb } from './api/client';
 
@@ -73,6 +74,7 @@ export function App() {
           <Route path="/recordings" element={<RecordingsPage />} />
           <Route path="/downloads" element={<DownloadsPage />} />
           <Route path="/settings" element={<SettingsPage />} />
+          <Route path="/guide" element={<GuidePage />} />
         </Routes>
       </Layout>
     </HashRouter>

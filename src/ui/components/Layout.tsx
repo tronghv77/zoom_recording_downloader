@@ -6,11 +6,12 @@ interface LayoutProps {
 }
 
 const navItems = [
-  { path: '/dashboard', label: 'Dashboard', icon: '/' },
-  { path: '/accounts', label: 'Accounts', icon: '/' },
-  { path: '/recordings', label: 'Recordings', icon: '/' },
-  { path: '/downloads', label: 'Downloads', icon: '/' },
-  { path: '/settings', label: 'Settings', icon: '/' },
+  { path: '/dashboard', label: 'Dashboard' },
+  { path: '/accounts', label: 'Accounts' },
+  { path: '/recordings', label: 'Recordings' },
+  { path: '/downloads', label: 'Downloads' },
+  { path: '/settings', label: 'Settings' },
+  { path: '/guide', label: 'Huong Dan' },
 ];
 
 export function Layout({ children }: LayoutProps) {

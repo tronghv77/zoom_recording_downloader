@@ -209,7 +209,10 @@ function AccountForm({ account, onSaved, onCancel }: AccountFormProps) {
     }
   }
 
+  const [showHelp, setShowHelp] = useState(!isEdit);
+
   return (
+    <div className="account-form-layout">
     <form className="form-card" onSubmit={handleSubmit}>
       <h3>{isEdit ? 'Edit Account' : 'Add Zoom Account'}</h3>
 
@@ -279,5 +282,56 @@ function AccountForm({ account, onSaved, onCancel }: AccountFormProps) {
         </button>
       </div>
     </form>
+
+    {showHelp && (
+      <div className="account-help-panel">
+        <div className="help-panel-header">
+          <h4>Huong dan lay thong so</h4>
+          <button className="btn btn-sm" onClick={() => setShowHelp(false)}>Dong</button>
+        </div>
+        <div className="help-panel-body">
+          <div className="help-step">
+            <strong>Buoc 1:</strong> Truy cap{' '}
+            <a href="https://marketplace.zoom.us" target="_blank" rel="noopener noreferrer">marketplace.zoom.us</a>
+            {' '}&rarr; Dang nhap
+          </div>
+          <div className="help-step">
+            <strong>Buoc 2:</strong> Develop &rarr; Build App &rarr; Chon <strong>Server-to-Server OAuth</strong> &rarr; Create
+          </div>
+          <div className="help-step">
+            <strong>Buoc 3:</strong> Dien thong tin app (ten, email) &rarr; Continue
+          </div>
+          <div className="help-step">
+            <strong>Buoc 4:</strong> Tab <strong>App Credentials</strong> &rarr; Copy 3 thong so:
+            <ul>
+              <li><strong>Account ID</strong></li>
+              <li><strong>Client ID</strong></li>
+              <li><strong>Client Secret</strong></li>
+            </ul>
+          </div>
+          <div className="help-step">
+            <strong>Buoc 5:</strong> Tab <strong>Scopes</strong> &rarr; Add Scopes:
+            <ul>
+              <li><code>cloud_recording:read:list_user_recordings</code></li>
+              <li><code>cloud_recording:read:list_recording_files</code></li>
+              <li><code>cloud_recording:write:recording</code></li>
+              <li><code>user:read:list_users</code></li>
+            </ul>
+          </div>
+          <div className="help-step">
+            <strong>Buoc 6:</strong> Tab <strong>Activation</strong> &rarr; <strong>Activate your app</strong>
+          </div>
+          <div className="help-step">
+            <strong>Buoc 7:</strong> Dan 3 thong so vao form ben trai &rarr; <strong>Save & Test Connection</strong>
+          </div>
+        </div>
+      </div>
+    )}
+    {!showHelp && !isEdit && (
+      <button className="btn btn-sm help-toggle-btn" onClick={() => setShowHelp(true)}>
+        Hien huong dan
+      </button>
+    )}
+    </div>
   );
 }
