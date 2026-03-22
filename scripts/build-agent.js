@@ -5,11 +5,12 @@ const fs = require('fs');
 
 const outFile = path.resolve(__dirname, '..', 'dist', 'agent', 'ZoomAgent.js');
 const outDir = path.dirname(outFile);
+const pkg = JSON.parse(fs.readFileSync(path.resolve(__dirname, '..', 'package.json'), 'utf-8'));
 
 // Ensure output directory
 fs.mkdirSync(outDir, { recursive: true });
 
-console.log('[1/2] Bundling agent with esbuild...');
+console.log(`[1/2] Bundling agent v${pkg.version} with esbuild...`);
 
 esbuild.buildSync({
   entryPoints: [path.resolve(__dirname, '..', 'src', 'agent', 'AgentClient.ts')],
@@ -19,6 +20,10 @@ esbuild.buildSync({
   outfile: outFile,
   minify: false,
   sourcemap: false,
+  // Inject version from package.json
+  define: {
+    'process.env.AGENT_VERSION': JSON.stringify(pkg.version),
+  },
   // Mark native modules as external (none needed for agent)
   external: ['bufferutil', 'utf-8-validate'],
 });

@@ -198,36 +198,89 @@ export class AgentClient {
 }
 
 // === CLI Entry Point ===
+import { loadConfig, saveConfig, promptSetup, getConfigFilePath, DEFAULT_SERVER, DEFAULT_SECRET } from './AgentConfig';
+import { checkForUpdate } from './UpdateChecker';
+
+const AGENT_VERSION = process.env.AGENT_VERSION || '0.0.0';
+
 if (require.main === module) {
   const args = process.argv.slice(2);
 
-  function getArg(flag: string, defaultValue: string): string {
+  function getArg(flag: string): string | undefined {
     const idx = args.indexOf(flag);
-    return idx >= 0 && args[idx + 1] ? args[idx + 1] : defaultValue;
+    return idx >= 0 && args[idx + 1] ? args[idx + 1] : undefined;
   }
 
-  const config: AgentConfig = {
-    serverUrl: getArg('--server', 'wss://zoomrecordingdownloader-production.up.railway.app/ws'),
-    deviceName: getArg('--name', os.hostname()),
-    downloadPath: getArg('--path', path.resolve('./downloads')),
-    secret: getArg('--secret', 'HoVanTrong@3773'),
-  };
+  function hasFlag(flag: string): boolean {
+    return args.includes(flag);
+  }
 
-  console.log('=== Zoom Recording Download Agent ===');
-  console.log(`Server:  ${config.serverUrl}`);
-  console.log(`Device:  ${config.deviceName}`);
-  console.log(`Path:    ${config.downloadPath}`);
-  console.log('');
+  async function main(): Promise<void> {
+    console.log(`╔══════════════════════════════════════════════╗`);
+    console.log(`║     Zoom Recording Download Agent v${AGENT_VERSION}`.padEnd(49) + '║');
+    console.log(`╚══════════════════════════════════════════════╝`);
+    console.log('');
 
-  // Ensure download path exists
-  fs.mkdirSync(config.downloadPath, { recursive: true });
+    // Check for updates (non-blocking)
+    checkForUpdate(AGENT_VERSION);
 
-  const agent = new AgentClient(config);
-  agent.connect();
+    let config: AgentConfig;
 
-  process.on('SIGINT', () => {
-    console.log('\n[Agent] Shutting down...');
-    agent.disconnect();
-    process.exit(0);
+    // --setup flag: force reconfigure
+    if (hasFlag('--setup')) {
+      const existing = loadConfig();
+      const saved = await promptSetup(existing || undefined);
+      config = { ...saved };
+      return; // Exit after setup, user will relaunch
+    }
+
+    // Check if CLI args provided (explicit override)
+    const hasCliArgs = getArg('--server') || getArg('--name') || getArg('--path');
+
+    if (hasCliArgs) {
+      // Use CLI args directly (backward compatible)
+      config = {
+        serverUrl: getArg('--server') || DEFAULT_SERVER,
+        deviceName: getArg('--name') || os.hostname(),
+        downloadPath: getArg('--path') || path.resolve('./downloads'),
+        secret: getArg('--secret') || DEFAULT_SECRET,
+      };
+    } else {
+      // Try loading saved config
+      const saved = loadConfig();
+      if (saved) {
+        config = { ...saved };
+        console.log(`  Config:  ${getConfigFilePath()}`);
+      } else {
+        // First run — show setup wizard
+        console.log('  Lan dau su dung — vui long cau hinh:');
+        const newConfig = await promptSetup();
+        config = { ...newConfig };
+      }
+    }
+
+    console.log(`  Server:  ${config.serverUrl}`);
+    console.log(`  Device:  ${config.deviceName}`);
+    console.log(`  Path:    ${config.downloadPath}`);
+    console.log('');
+    console.log('  Tip: Chay voi --setup de thay doi cau hinh');
+    console.log('');
+
+    // Ensure download path exists
+    fs.mkdirSync(config.downloadPath, { recursive: true });
+
+    const agent = new AgentClient(config);
+    agent.connect();
+
+    process.on('SIGINT', () => {
+      console.log('\n[Agent] Shutting down...');
+      agent.disconnect();
+      process.exit(0);
+    });
+  }
+
+  main().catch(err => {
+    console.error('Fatal error:', err);
+    process.exit(1);
   });
 }
