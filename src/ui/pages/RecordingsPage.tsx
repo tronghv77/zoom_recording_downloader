@@ -23,6 +23,9 @@ export function RecordingsPage() {
   const [schedulerBusy, setSchedulerBusy] = useState(false);
   const [agents, setAgents] = useState<any[]>([]);
   const [selectedAgent, setSelectedAgent] = useState<string>('server');
+  const [batchMode, setBatchMode] = useState(false);
+  const [selectedRecordings, setSelectedRecordings] = useState<Set<string>>(new Set());
+  const [downloadSummary, setDownloadSummary] = useState<Record<string, any>>({});
 
   const [filter, setFilter] = useState({
     accountId: '',
@@ -38,6 +41,11 @@ export function RecordingsPage() {
 
     const unsubs: Array<() => void> = [];
     unsubs.push(api.scheduler.onMessage(() => { loadScheduler(); }));
+
+    // Load download summary
+    if (isWeb && (api as any).download?.getSummary) {
+      (api as any).download.getSummary().then(setDownloadSummary).catch(() => {});
+    }
 
     // Load agents in web mode
     if (isWeb && (api as any).agents) {
@@ -213,6 +221,49 @@ export function RecordingsPage() {
       setSyncResult(`Added 1 file to download queue`);
     } catch (err: any) {
       setError(err.message || 'Failed to enqueue download');
+    }
+  }
+
+  function toggleBatchRecording(recId: string) {
+    setSelectedRecordings((prev) => {
+      const next = new Set(prev);
+      if (next.has(recId)) next.delete(recId);
+      else next.add(recId);
+      return next;
+    });
+  }
+
+  function selectAllRecordings() {
+    setSelectedRecordings(new Set(recordings.map((r) => r.id)));
+  }
+
+  function selectNoneRecordings() {
+    setSelectedRecordings(new Set());
+  }
+
+  async function handleBatchDownload() {
+    const selectedRecs = recordings.filter((r) => selectedRecordings.has(r.id));
+    const allFileIds = selectedRecs.flatMap((r) => r.recordingFiles.map((f) => f.id));
+    if (allFileIds.length === 0) return;
+    try {
+      if (selectedAgent !== 'server' && isWeb && (api as any).agents) {
+        const result = await (api as any).agents.downloadToAgent(selectedAgent, allFileIds);
+        const agentName = agents.find((a) => a.id === selectedAgent)?.deviceName || selectedAgent;
+        setSyncResult(`Sent ${result.sent} file(s) from ${selectedRecs.length} recording(s) to "${agentName}"`);
+      } else {
+        const dir = await getDownloadDir();
+        if (!dir) return;
+        await api.download.enqueue(allFileIds, { destinationDir: dir });
+        setSyncResult(`Added ${allFileIds.length} file(s) from ${selectedRecs.length} recording(s) to queue`);
+      }
+      setBatchMode(false);
+      setSelectedRecordings(new Set());
+      // Refresh download summary
+      if (isWeb && (api as any).download?.getSummary) {
+        (api as any).download.getSummary().then(setDownloadSummary).catch(() => {});
+      }
+    } catch (err: any) {
+      setError(err.message || 'Failed to batch download');
     }
   }
 
@@ -409,7 +460,45 @@ export function RecordingsPage() {
           onKeyDown={(e) => e.key === 'Enter' && handleFilter()}
         />
         <button className="btn" onClick={handleFilter}>Filter</button>
+        <button
+          className={`btn ${batchMode ? 'btn-danger' : 'btn-primary'}`}
+          onClick={() => { setBatchMode(!batchMode); setSelectedRecordings(new Set()); }}
+        >
+          {batchMode ? 'Cancel Batch' : 'Batch Download'}
+        </button>
       </div>
+
+      {batchMode && (
+        <div className="batch-toolbar">
+          <button className="btn btn-sm" onClick={selectAllRecordings}>Select All</button>
+          <button className="btn btn-sm" onClick={selectNoneRecordings}>Select None</button>
+          <span className="batch-count">{selectedRecordings.size} / {recordings.length} recording(s) selected</span>
+          <div style={{ flex: 1 }} />
+          {isWeb && (
+            <div className="device-selector">
+              <select
+                className="device-picker"
+                value={selectedAgent}
+                onChange={(e) => setSelectedAgent(e.target.value)}
+              >
+                <option value="server">💻 Server (local)</option>
+                {agents.map((a) => (
+                  <option key={a.id} value={a.id}>
+                    {a.status === 'online' ? '🟢' : a.status === 'busy' ? '🟡' : '⚫'} {a.deviceName}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+          <button
+            className="btn btn-primary"
+            onClick={handleBatchDownload}
+            disabled={selectedRecordings.size === 0}
+          >
+            Download {selectedRecordings.size} recording(s)
+          </button>
+        </div>
+      )}
 
       {loading ? (
         <div className="empty-state">Loading recordings...</div>
@@ -417,8 +506,17 @@ export function RecordingsPage() {
         <>
           <div className="recording-list">
             {recordings.map((rec) => (
-              <div key={rec.id} className="recording-card">
-                <div className="recording-header" onClick={() => toggleExpand(rec.id)}>
+              <div key={rec.id} className={`recording-card ${batchMode && selectedRecordings.has(rec.id) ? 'batch-selected' : ''}`}>
+                <div className="recording-header" onClick={() => batchMode ? toggleBatchRecording(rec.id) : toggleExpand(rec.id)}>
+                  {batchMode && (
+                    <div className="batch-checkbox" onClick={(e) => e.stopPropagation()}>
+                      <input
+                        type="checkbox"
+                        checked={selectedRecordings.has(rec.id)}
+                        onChange={() => toggleBatchRecording(rec.id)}
+                      />
+                    </div>
+                  )}
                   <div className="recording-expand">
                     {expandedId === rec.id ? '▼' : '▶'}
                   </div>
@@ -433,6 +531,18 @@ export function RecordingsPage() {
                   <div className="recording-badges">
                     <span className="file-count">{rec.recordingFiles.length} files</span>
                     <span className={`status-badge status-${rec.status}`}>{rec.status}</span>
+                    {downloadSummary[rec.id] && (
+                      <span className={`download-badge download-${downloadSummary[rec.id].status}`}>
+                        {downloadSummary[rec.id].status === 'completed' ? '✅' :
+                         downloadSummary[rec.id].status === 'downloading' ? '⏬' :
+                         downloadSummary[rec.id].status === 'failed' ? '❌' : '⏳'}
+                        {' '}
+                        {downloadSummary[rec.id].completedCount}/{downloadSummary[rec.id].totalCount}
+                        {downloadSummary[rec.id].agentId
+                          ? ` 📱 ${downloadSummary[rec.id].agentId.replace('agent-', '')}`
+                          : ' 💻 Server'}
+                      </span>
+                    )}
                   </div>
                   <div className="recording-actions" onClick={(e) => e.stopPropagation()}>
                     <button className="btn btn-sm" onClick={() => startRename(rec)}>

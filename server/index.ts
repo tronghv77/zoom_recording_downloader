@@ -44,7 +44,7 @@ async function main() {
     schedulerService.start(schedulerConfig);
   }
 
-  const services = { accountService, recordingService, downloadService, schedulerService, settingsRepo };
+  const services = { accountService, recordingService, downloadService, schedulerService, settingsRepo, downloadRepo };
 
   // Create Express app
   const app = express();

@@ -4,6 +4,7 @@ import type { RecordingService } from '../../src/services/RecordingService';
 import type { DownloadService } from '../../src/services/DownloadService';
 import type { SchedulerService } from '../../src/services/SchedulerService';
 import type { SettingsRepository } from '../../src/database/repositories/SettingsRepository';
+import type { DownloadRepository } from '../../src/database/repositories/DownloadRepository';
 import { getAgentList, sendDownloadToAgent } from '../ws';
 
 interface Services {
@@ -12,6 +13,7 @@ interface Services {
   downloadService: DownloadService;
   schedulerService: SchedulerService;
   settingsRepo: SettingsRepository;
+  downloadRepo: DownloadRepository;
 }
 
 // Wrap async handler to catch errors
@@ -101,6 +103,11 @@ export function createApiRouter(services: Services): Router {
   // === Downloads ===
   router.get('/downloads', wrap(async (_req, res) => {
     const data = await services.downloadService.getQueue();
+    res.json({ success: true, data });
+  }));
+
+  router.get('/downloads/summary', wrap(async (_req, res) => {
+    const data = services.downloadRepo.getDownloadSummary();
     res.json({ success: true, data });
   }));
 
@@ -250,8 +257,16 @@ async function getFileForAgentDownload(services: Services, recordingFileId: stri
 
         const settings = services.settingsRepo.getAll();
         const template = settings.folderTemplate || '{topic}';
-        const startTime = new Date(rec.startTime);
-        const timeStr = `${String(startTime.getHours()).padStart(2, '0')}-${String(startTime.getMinutes()).padStart(2, '0')}`;
+
+        // Convert UTC to Vietnam timezone (UTC+7)
+        const TZ_OFFSET = 7;
+        const utcTime = new Date(rec.startTime);
+        const localTime = new Date(utcTime.getTime() + TZ_OFFSET * 60 * 60 * 1000);
+        const vnYear = String(localTime.getUTCFullYear());
+        const vnMonth = String(localTime.getUTCMonth() + 1).padStart(2, '0');
+        const vnDay = String(localTime.getUTCDate()).padStart(2, '0');
+        const vnDate = `${vnYear}-${vnMonth}-${vnDay}`;
+        const vnTime = `${String(localTime.getUTCHours()).padStart(2, '0')}-${String(localTime.getUTCMinutes()).padStart(2, '0')}`;
 
         const safeTopic = rec.meetingTopic.replace(/[<>:"/\\|?*]/g, '_').trim();
         const safeAccount = account.name.replace(/[<>:"/\\|?*]/g, '_').trim();
@@ -259,10 +274,10 @@ async function getFileForAgentDownload(services: Services, recordingFileId: stri
         const folderPath = template
           .replace('{account}', safeAccount)
           .replace('{topic}', safeTopic)
-          .replace('{year}', String(startTime.getFullYear()))
-          .replace('{month}', String(startTime.getMonth() + 1).padStart(2, '0'))
-          .replace('{date}', startTime.toISOString().split('T')[0])
-          .replace('{time}', timeStr);
+          .replace('{year}', vnYear)
+          .replace('{month}', vnMonth)
+          .replace('{date}', vnDate)
+          .replace('{time}', vnTime);
 
         const destPath = `${folderPath}/${file.fileType}.${file.fileExtension}`;
 

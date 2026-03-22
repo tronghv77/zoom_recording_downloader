@@ -3,6 +3,19 @@ import { randomUUID } from 'crypto';
 import { DownloadTask, DownloadTaskStatus, DownloadOptions } from '../../shared/types';
 import { saveDatabase } from '../connection';
 
+// Convert UTC time to Vietnam timezone (UTC+7) for folder template
+function toVNTime(utcDateStr: string): { year: string; month: string; date: string; time: string } {
+  const TZ_OFFSET = 7; // Vietnam = UTC+7
+  const utc = new Date(utcDateStr);
+  const local = new Date(utc.getTime() + TZ_OFFSET * 60 * 60 * 1000);
+  const year = String(local.getUTCFullYear());
+  const month = String(local.getUTCMonth() + 1).padStart(2, '0');
+  const day = String(local.getUTCDate()).padStart(2, '0');
+  const hours = String(local.getUTCHours()).padStart(2, '0');
+  const minutes = String(local.getUTCMinutes()).padStart(2, '0');
+  return { year, month, date: `${year}-${month}-${day}`, time: `${hours}-${minutes}` };
+}
+
 export class DownloadRepository {
   constructor(private db: SqlJsDatabase) {}
 
@@ -51,15 +64,14 @@ export class DownloadRepository {
 
     // Build folder path from template
     const template = folderTemplate || '{topic}';
-    const startTime = new Date(String(file.start_time || new Date().toISOString()));
-    const timeStr = `${String(startTime.getHours()).padStart(2, '0')}-${String(startTime.getMinutes()).padStart(2, '0')}`;
+    const vn = toVNTime(String(file.start_time || new Date().toISOString()));
     const folderPath = template
       .replace('{account}', sanitizeFileName(String(file.account_name || 'Unknown')))
       .replace('{topic}', sanitizeFileName(String(file.meeting_topic || 'Untitled')))
-      .replace('{year}', String(startTime.getFullYear()))
-      .replace('{month}', String(startTime.getMonth() + 1).padStart(2, '0'))
-      .replace('{date}', startTime.toISOString().split('T')[0])
-      .replace('{time}', timeStr);
+      .replace('{year}', vn.year)
+      .replace('{month}', vn.month)
+      .replace('{date}', vn.date)
+      .replace('{time}', vn.time);
 
     const destinationPath = `${options.destinationDir}/${folderPath}/${safeType}.${ext}`;
 
@@ -143,6 +155,37 @@ export class DownloadRepository {
     const row: Record<string, any> = {};
     columns.forEach((col, i) => { row[col] = values[i]; });
     return this.mapObject(row);
+  }
+
+  getDownloadSummary(): Record<string, { agentId: string | null; completedCount: number; totalCount: number; status: string }> {
+    const result = this.db.exec(`
+      SELECT recording_id,
+             agent_id,
+             COUNT(*) as total_count,
+             SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) as completed_count,
+             CASE
+               WHEN SUM(CASE WHEN status = 'downloading' THEN 1 ELSE 0 END) > 0 THEN 'downloading'
+               WHEN SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) = COUNT(*) THEN 'completed'
+               WHEN SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) > 0 THEN 'failed'
+               WHEN SUM(CASE WHEN status = 'queued' THEN 1 ELSE 0 END) > 0 THEN 'queued'
+               ELSE 'unknown'
+             END as group_status
+      FROM download_tasks
+      GROUP BY recording_id
+    `);
+    const summary: Record<string, any> = {};
+    if (result.length > 0) {
+      for (const row of result[0].values) {
+        const recId = row[0] as string;
+        summary[recId] = {
+          agentId: row[1] as string | null,
+          totalCount: row[2] as number,
+          completedCount: row[3] as number,
+          status: row[4] as string,
+        };
+      }
+    }
+    return summary;
   }
 }
 

@@ -97,6 +97,7 @@ export const httpApi = {
     cancel: (taskId: string) => request<void>('POST', `/downloads/${taskId}/cancel`),
     retry: (taskId: string) => request<void>('POST', `/downloads/${taskId}/retry`),
     getQueue: () => request<any[]>('GET', '/downloads'),
+    getSummary: () => request<Record<string, any>>('GET', '/downloads/summary'),
     onProgress: (callback: (progress: any) => void) => {
       return onWsEvent('download:progress', callback);
     },

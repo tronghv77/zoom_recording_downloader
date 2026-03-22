@@ -702,6 +702,68 @@ tr:hover td {
   white-space: nowrap;
 }
 
+/* Batch mode */
+.batch-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px;
+  background: var(--bg-card);
+  border-radius: 8px;
+  margin-bottom: 12px;
+  border: 1px solid var(--accent);
+}
+
+.batch-count {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.batch-checkbox {
+  display: flex;
+  align-items: center;
+  padding-right: 8px;
+}
+
+.batch-checkbox input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  cursor: pointer;
+}
+
+.recording-card.batch-selected {
+  border-left: 3px solid var(--accent);
+  background: rgba(99, 102, 241, 0.06);
+}
+
+/* Download badge */
+.download-badge {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  white-space: nowrap;
+}
+
+.download-badge.download-completed {
+  background: rgba(34, 197, 94, 0.15);
+  color: var(--success);
+}
+
+.download-badge.download-downloading {
+  background: rgba(99, 102, 241, 0.15);
+  color: var(--accent);
+}
+
+.download-badge.download-failed {
+  background: rgba(239, 68, 68, 0.15);
+  color: var(--danger);
+}
+
+.download-badge.download-queued {
+  background: rgba(245, 158, 11, 0.15);
+  color: var(--warning);
+}
+
 .file-picker-count {
   font-size: 13px;
   color: var(--text-secondary);
