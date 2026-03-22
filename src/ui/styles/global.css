@@ -601,6 +601,26 @@ tr:hover td {
   min-width: 0;
 }
 
+.recording-title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 2px;
+}
+
+.meeting-id-tag {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #fff;
+  white-space: nowrap;
+  flex-shrink: 0;
+  font-family: monospace;
+  letter-spacing: 0.5px;
+}
+
 .recording-title {
   font-weight: 600;
   font-size: 15px;
@@ -629,6 +649,12 @@ tr:hover td {
   border-radius: 4px;
   font-size: 11px;
   font-weight: 600;
+}
+
+.file-type-icons {
+  font-size: 14px;
+  letter-spacing: 2px;
+  cursor: default;
 }
 
 .file-count {

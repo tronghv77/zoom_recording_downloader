@@ -1,8 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import { api, isWeb } from '../api/client';
+import { useTranslation } from '../i18n';
 import type { Recording, RecordingFile, ZoomAccount } from '../../shared/types';
 
 export function RecordingsPage() {
+  const { t } = useTranslation();
   const [recordings, setRecordings] = useState<Recording[]>([]);
   const [accounts, setAccounts] = useState<ZoomAccount[]>([]);
   const [totalCount, setTotalCount] = useState(0);
@@ -521,7 +523,12 @@ export function RecordingsPage() {
                     {expandedId === rec.id ? '▼' : '▶'}
                   </div>
                   <div className="recording-info">
-                    <div className="recording-title" title={rec.meetingTopic}>{rec.meetingTopic}</div>
+                    <div className="recording-title-row">
+                      <span className="meeting-id-tag" style={{ background: getMeetingColor(rec.meetingId) }} title={`Meeting ID: ${rec.meetingId}`}>
+                        {rec.meetingId}
+                      </span>
+                      <span className="recording-title" title={rec.meetingTopic}>{rec.meetingTopic}</span>
+                    </div>
                     <div className="recording-meta">
                       <span className="recording-account-tag">{getAccountName(rec.accountId)}</span>
                       {rec.hostEmail && <> &middot; {rec.hostEmail}</>}
@@ -529,7 +536,10 @@ export function RecordingsPage() {
                     </div>
                   </div>
                   <div className="recording-badges">
-                    <span className="file-count">{rec.recordingFiles.length} files</span>
+                    <span className="file-type-icons" title={rec.recordingFiles.map(f => getFileTypeLabel(f.fileType)).join(', ')}>
+                      {getFileTypeIcons(rec.recordingFiles).join(' ')}
+                    </span>
+                    <span className="file-count">{rec.recordingFiles.length} {t('recordings.files')}</span>
                     <span className={`status-badge status-${rec.status}`}>{rec.status}</span>
                     {downloadSummary[rec.id] && (
                       <span className={`download-badge download-${downloadSummary[rec.id].status}`}>
@@ -721,6 +731,34 @@ const FILE_TYPE_LABELS: Record<string, string> = {
 
 function getFileTypeLabel(type: string): string {
   return FILE_TYPE_LABELS[type] || type.replace(/_/g, ' ');
+}
+
+// Color for Meeting ID — same ID always gets same color
+const MEETING_COLORS = [
+  '#6366f1', '#ec4899', '#f59e0b', '#10b981', '#3b82f6',
+  '#8b5cf6', '#ef4444', '#14b8a6', '#f97316', '#06b6d4',
+  '#84cc16', '#e879f9', '#22d3ee', '#fb923c', '#a78bfa',
+];
+
+function getMeetingColor(meetingId: string): string {
+  let hash = 0;
+  for (let i = 0; i < meetingId.length; i++) {
+    hash = ((hash << 5) - hash + meetingId.charCodeAt(i)) | 0;
+  }
+  return MEETING_COLORS[Math.abs(hash) % MEETING_COLORS.length];
+}
+
+// File type icons
+function getFileTypeIcons(files: { fileType: string }[]): string[] {
+  const types = new Set(files.map(f => f.fileType));
+  const icons: string[] = [];
+  if ([...types].some(t => t.includes('speaker') || t.includes('gallery') || t.includes('screen'))) icons.push('🎬');
+  if (types.has('audio_only')) icons.push('🎵');
+  if (types.has('chat_file')) icons.push('💬');
+  if (types.has('audio_transcript')) icons.push('📝');
+  if (types.has('timeline')) icons.push('⏱');
+  if (types.has('closed_caption')) icons.push('📄');
+  return icons;
 }
 
 function formatSize(bytes: number): string {
