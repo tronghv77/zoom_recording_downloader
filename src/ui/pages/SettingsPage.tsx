@@ -1,5 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { api, isElectron } from '../api/client';
+import { useTranslation } from '../i18n';
+import type { Language } from '../i18n';
 
 interface AppSettings {
   defaultDownloadDir: string;
@@ -20,6 +22,7 @@ const FOLDER_TEMPLATES = [
 ];
 
 export function SettingsPage() {
+  const { t, lang, setLang } = useTranslation();
   const [settings, setSettings] = useState<AppSettings | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -116,11 +119,11 @@ export function SettingsPage() {
   return (
     <div className="page">
       <div className="page-header">
-        <h2>Settings</h2>
+        <h2>{t('settings.title')}</h2>
         <div className="header-actions">
-          {saved && <span className="save-success">Saved!</span>}
+          {saved && <span className="save-success">{t('settings.saved')}</span>}
           <button className="btn btn-primary" onClick={handleSave} disabled={saving}>
-            {saving ? 'Saving...' : 'Save Settings'}
+            {saving ? '...' : t('settings.save')}
           </button>
         </div>
       </div>
@@ -280,11 +283,11 @@ export function SettingsPage() {
       )}
 
       <div className="settings-section">
-        <h3>Application</h3>
+        <h3>{t('settings.title')}</h3>
 
         <div className="form-row">
           <div className="form-group">
-            <label>Theme</label>
+            <label>{t('settings.theme')}</label>
             <select
               value={settings.theme || 'dark'}
               onChange={(e) => {
@@ -293,20 +296,30 @@ export function SettingsPage() {
                 document.documentElement.setAttribute('data-theme', theme);
               }}
             >
-              <option value="dark">Dark</option>
-              <option value="light">Light</option>
+              <option value="dark">{t('settings.dark')}</option>
+              <option value="light">{t('settings.light')}</option>
             </select>
           </div>
           <div className="form-group">
-            <label>Minimize to System Tray</label>
+            <label>{t('settings.language')}</label>
             <select
-              value={settings.minimizeToTray ? 'true' : 'false'}
-              onChange={(e) => setSettings({ ...settings, minimizeToTray: e.target.value === 'true' })}
+              value={lang}
+              onChange={(e) => setLang(e.target.value as Language)}
             >
-              <option value="false">No — close normally</option>
-              <option value="true">Yes — minimize to tray on close</option>
+              <option value="vi">Tiếng Việt</option>
+              <option value="en">English</option>
             </select>
           </div>
+        </div>
+        <div className="form-group">
+          <label>{t('settings.minimizeToTray')}</label>
+          <select
+            value={settings.minimizeToTray ? 'true' : 'false'}
+            onChange={(e) => setSettings({ ...settings, minimizeToTray: e.target.value === 'true' })}
+          >
+            <option value="false">No</option>
+            <option value="true">Yes</option>
+          </select>
         </div>
       </div>
     </div>

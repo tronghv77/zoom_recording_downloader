@@ -1,20 +1,24 @@
 import React from 'react';
 import { NavLink } from 'react-router-dom';
+import { useTranslation } from '../i18n';
+import type { TranslationKey } from '../i18n';
 
 interface LayoutProps {
   children: React.ReactNode;
 }
 
-const navItems = [
-  { path: '/dashboard', label: 'Dashboard' },
-  { path: '/accounts', label: 'Accounts' },
-  { path: '/recordings', label: 'Recordings' },
-  { path: '/downloads', label: 'Downloads' },
-  { path: '/settings', label: 'Settings' },
-  { path: '/guide', label: 'Huong Dan' },
+const navItems: { path: string; labelKey: TranslationKey }[] = [
+  { path: '/dashboard', labelKey: 'nav.dashboard' },
+  { path: '/accounts', labelKey: 'nav.accounts' },
+  { path: '/recordings', labelKey: 'nav.recordings' },
+  { path: '/downloads', labelKey: 'nav.downloads' },
+  { path: '/settings', labelKey: 'nav.settings' },
+  { path: '/guide', labelKey: 'nav.guide' },
 ];
 
 export function Layout({ children }: LayoutProps) {
+  const { t } = useTranslation();
+
   return (
     <div className="app-layout">
       <aside className="sidebar">
@@ -30,7 +34,7 @@ export function Layout({ children }: LayoutProps) {
                 `nav-item ${isActive ? 'nav-item--active' : ''}`
               }
             >
-              {item.label}
+              {t(item.labelKey)}
             </NavLink>
           ))}
         </nav>

@@ -1,23 +1,27 @@
 import React, { useState } from 'react';
+import { useTranslation } from '../i18n';
 
 type Section = 'overview' | 'account' | 'recordings' | 'agent' | 'faq';
 
 export function GuidePage() {
+  const { t, lang } = useTranslation();
   const [active, setActive] = useState<Section>('overview');
+
+  const sections: [Section, string][] = [
+    ['overview', t('guide.overview')],
+    ['account', t('guide.addAccount')],
+    ['recordings', t('guide.downloadRecordings')],
+    ['agent', t('guide.setupAgent')],
+    ['faq', t('guide.faq')],
+  ];
 
   return (
     <div className="page">
-      <h2>Huong Dan Su Dung</h2>
+      <h2>{t('guide.title')}</h2>
 
       <div className="guide-layout">
         <div className="guide-nav">
-          {([
-            ['overview', 'Tong Quan'],
-            ['account', 'Them Account Zoom'],
-            ['recordings', 'Tai Recordings'],
-            ['agent', 'Cai Dat Agent'],
-            ['faq', 'Cau Hoi Thuong Gap'],
-          ] as [Section, string][]).map(([key, label]) => (
+          {sections.map(([key, label]) => (
             <button
               key={key}
               className={`guide-nav-item ${active === key ? 'guide-nav-active' : ''}`}
@@ -29,324 +33,240 @@ export function GuidePage() {
         </div>
 
         <div className="guide-content">
-          {active === 'overview' && <OverviewSection />}
-          {active === 'account' && <AccountSection />}
-          {active === 'recordings' && <RecordingsSection />}
-          {active === 'agent' && <AgentSection />}
-          {active === 'faq' && <FaqSection />}
+          {active === 'overview' && <OverviewSection lang={lang} />}
+          {active === 'account' && <AccountSection lang={lang} />}
+          {active === 'recordings' && <RecordingsSection lang={lang} />}
+          {active === 'agent' && <AgentSection lang={lang} />}
+          {active === 'faq' && <FaqSection lang={lang} />}
         </div>
       </div>
     </div>
   );
 }
 
-function OverviewSection() {
+function OverviewSection({ lang }: { lang: string }) {
+  if (lang === 'en') return (
+    <div className="guide-section">
+      <h3>Overview</h3>
+      <p>Zoom Recording Downloader helps you manage and download recording files from Zoom Cloud to your computer.</p>
+      <div className="guide-steps">
+        <Step n={1} title="Add Zoom Account" desc="Connect your Zoom account using Server-to-Server OAuth. Supports multiple accounts." />
+        <Step n={2} title="Sync Recordings" desc='Click "Sync All" to fetch recording list from Zoom Cloud. You can schedule auto-sync.' />
+        <Step n={3} title="Download" desc="Select recordings to download, choose target device (Server or Agent), click Download." />
+        <Step n={4} title="Manage" desc="Track download progress in the Downloads page. Delete recordings from Zoom Cloud when done." />
+      </div>
+      <div className="guide-info-box">
+        <strong>3 ways to use:</strong>
+        <ul>
+          <li><strong>Desktop App</strong> — Install on your computer, use independently</li>
+          <li><strong>Web UI</strong> — Access from browser, manage remotely</li>
+          <li><strong>Download Agent</strong> — Run on target machine, receive download commands from Web UI</li>
+        </ul>
+      </div>
+    </div>
+  );
+
   return (
     <div className="guide-section">
-      <h3>Tong Quan</h3>
-      <p>Zoom Recording Downloader giup ban quan ly va tai file ghi hinh tu Zoom Cloud ve may tinh.</p>
-
+      <h3>Tổng Quan</h3>
+      <p>Zoom Recording Downloader giúp bạn quản lý và tải file ghi hình từ Zoom Cloud về máy tính.</p>
       <div className="guide-steps">
-        <div className="guide-step">
-          <div className="step-number">1</div>
-          <div className="step-content">
-            <h4>Them Account Zoom</h4>
-            <p>Ket noi tai khoan Zoom bang Server-to-Server OAuth. Ung dung ho tro nhieu tai khoan cung luc.</p>
-          </div>
-        </div>
-        <div className="guide-step">
-          <div className="step-number">2</div>
-          <div className="step-content">
-            <h4>Dong Bo Recordings</h4>
-            <p>Bam "Sync All" de lay danh sach recordings tu Zoom Cloud. Co the hen gio tu dong dong bo.</p>
-          </div>
-        </div>
-        <div className="guide-step">
-          <div className="step-number">3</div>
-          <div className="step-content">
-            <h4>Tai Ve</h4>
-            <p>Chon recordings can tai, chon thiet bi dich (Server hoac Agent), bam Download.</p>
-          </div>
-        </div>
-        <div className="guide-step">
-          <div className="step-number">4</div>
-          <div className="step-content">
-            <h4>Quan Ly</h4>
-            <p>Theo doi tien trinh tai trong trang Downloads. Xoa recordings khoi Zoom Cloud khi khong can.</p>
-          </div>
-        </div>
+        <Step n={1} title="Thêm Tài Khoản Zoom" desc="Kết nối tài khoản Zoom bằng Server-to-Server OAuth. Ứng dụng hỗ trợ nhiều tài khoản cùng lúc." />
+        <Step n={2} title="Đồng Bộ Bản Ghi" desc='Bấm "Đồng Bộ Tất Cả" để lấy danh sách bản ghi từ Zoom Cloud. Có thể hẹn giờ tự động đồng bộ.' />
+        <Step n={3} title="Tải Về" desc="Chọn bản ghi cần tải, chọn thiết bị đích (Server hoặc Agent), bấm Tải Về." />
+        <Step n={4} title="Quản Lý" desc="Theo dõi tiến trình tải trong trang Tải Về. Xóa bản ghi khỏi Zoom Cloud khi không cần." />
       </div>
-
       <div className="guide-info-box">
-        <strong>3 cach su dung:</strong>
+        <strong>3 cách sử dụng:</strong>
         <ul>
-          <li><strong>Desktop App</strong> — Cai dat tren may tinh, su dung doc lap</li>
-          <li><strong>Web UI</strong> — Truy cap tu trinh duyet, quan ly tu xa</li>
-          <li><strong>Download Agent</strong> — Chay tren may dich, nhan lenh tai tu Web UI</li>
+          <li><strong>Desktop App</strong> — Cài đặt trên máy tính, sử dụng độc lập</li>
+          <li><strong>Web UI</strong> — Truy cập từ trình duyệt, quản lý từ xa</li>
+          <li><strong>Download Agent</strong> — Chạy trên máy đích, nhận lệnh tải từ Web UI</li>
         </ul>
       </div>
     </div>
   );
 }
 
-function AccountSection() {
+function AccountSection({ lang }: { lang: string }) {
+  if (lang === 'en') return (
+    <div className="guide-section">
+      <h3>How to Add a Zoom Account</h3>
+      <p>To connect to Zoom Cloud, you need to create a Server-to-Server OAuth app on Zoom Marketplace.</p>
+      <div className="guide-steps">
+        <Step n={1} title="Login to Zoom Marketplace" desc={<>Go to <a href="https://marketplace.zoom.us" target="_blank" rel="noopener noreferrer">marketplace.zoom.us</a> and sign in with your Zoom account (Admin or Owner).</>} />
+        <Step n={2} title="Create a new App" desc={<>Navigate to <strong>Develop</strong> → <strong>Build App</strong>. Select type: <strong>Server-to-Server OAuth</strong> → Click <strong>Create</strong>. Name your app (e.g., "Recording Downloader").<div className="guide-warning">Important: Choose <strong>Server-to-Server OAuth</strong>, NOT OAuth or JWT.</div></>} />
+        <Step n={3} title="Fill in App Information" desc={<>In the <strong>Information</strong> tab: enter App Name, Company Name, Developer Name and Email. Click <strong>Continue</strong>.</>} />
+        <Step n={4} title="Copy 3 Important Values" desc={<>In the <strong>App Credentials</strong> tab, copy these 3 values:<Credentials /><div className="guide-warning">Note: Client Secret is shown only once. Save it immediately!</div></>} />
+        <Step n={5} title="Add Scopes (Permissions)" desc={<>Go to <strong>Scopes</strong> tab → click <strong>+ Add Scopes</strong>. Add these scopes:<Scopes /></>} />
+        <Step n={6} title="Activate the App" desc={<>Go to <strong>Activation</strong> tab → click <strong>Activate your app</strong>. The app status should change to Active.</>} />
+        <Step n={7} title="Enter in the Application" desc={<>Go back to Zoom Recording Downloader → <strong>Accounts</strong> page → click <strong>Add Account</strong>. Enter the 3 values from Step 4. Click <strong>Save & Test Connection</strong>.</>} />
+      </div>
+      <div className="guide-info-box">
+        <strong>Tip:</strong> Each Zoom account needs its own app. If you manage multiple Zoom accounts, repeat this process for each one.
+      </div>
+    </div>
+  );
+
   return (
     <div className="guide-section">
-      <h3>Huong Dan Them Account Zoom</h3>
-      <p>De ket noi voi Zoom Cloud, ban can tao mot ung dung Server-to-Server OAuth tren Zoom Marketplace.</p>
-
+      <h3>Hướng Dẫn Thêm Tài Khoản Zoom</h3>
+      <p>Để kết nối với Zoom Cloud, bạn cần tạo một ứng dụng Server-to-Server OAuth trên Zoom Marketplace.</p>
       <div className="guide-steps">
-        <div className="guide-step">
-          <div className="step-number">1</div>
-          <div className="step-content">
-            <h4>Dang nhap Zoom Marketplace</h4>
-            <p>Truy cap <a href="https://marketplace.zoom.us" target="_blank" rel="noopener noreferrer">marketplace.zoom.us</a> va dang nhap bang tai khoan Zoom cua ban (tai khoan Admin hoac Owner).</p>
-          </div>
-        </div>
-
-        <div className="guide-step">
-          <div className="step-number">2</div>
-          <div className="step-content">
-            <h4>Tao App moi</h4>
-            <p>Vao menu <strong>Develop</strong> &rarr; <strong>Build App</strong></p>
-            <p>Chon loai: <strong>Server-to-Server OAuth</strong> &rarr; Bam <strong>Create</strong></p>
-            <p>Dat ten app bat ky, vi du: "Recording Downloader"</p>
-            <div className="guide-warning">
-              Luu y: Phai chon dung loai <strong>Server-to-Server OAuth</strong>, khong phai OAuth hoac JWT.
-            </div>
-          </div>
-        </div>
-
-        <div className="guide-step">
-          <div className="step-number">3</div>
-          <div className="step-content">
-            <h4>Dien thong tin App</h4>
-            <p>Trong tab <strong>Information</strong>:</p>
-            <ul>
-              <li>App Name: dat ten bat ky</li>
-              <li>Company Name: ten cong ty</li>
-              <li>Developer Name va Email: thong tin cua ban</li>
-            </ul>
-            <p>Bam <strong>Continue</strong> de sang buoc tiep.</p>
-          </div>
-        </div>
-
-        <div className="guide-step">
-          <div className="step-number">4</div>
-          <div className="step-content">
-            <h4>Copy 3 thong so quan trong</h4>
-            <p>Trong tab <strong>App Credentials</strong>, copy 3 gia tri sau:</p>
-            <div className="guide-credentials">
-              <div className="guide-credential-item">
-                <span className="credential-label">Account ID</span>
-                <span className="credential-desc">Ma dinh danh tai khoan Zoom cua ban</span>
-              </div>
-              <div className="guide-credential-item">
-                <span className="credential-label">Client ID</span>
-                <span className="credential-desc">Ma dinh danh cua ung dung</span>
-              </div>
-              <div className="guide-credential-item">
-                <span className="credential-label">Client Secret</span>
-                <span className="credential-desc">Mat khau bi mat cua ung dung (khong chia se)</span>
-              </div>
-            </div>
-            <div className="guide-warning">
-              Luu y: Client Secret chi hien thi 1 lan. Hay luu lai ngay!
-            </div>
-          </div>
-        </div>
-
-        <div className="guide-step">
-          <div className="step-number">5</div>
-          <div className="step-content">
-            <h4>Cap quyen (Scopes)</h4>
-            <p>Vao tab <strong>Scopes</strong> &rarr; bam <strong>+ Add Scopes</strong></p>
-            <p>Tim va them cac quyen sau:</p>
-            <div className="guide-scopes">
-              <div className="scope-item">
-                <code>cloud_recording:read:list_user_recordings</code>
-                <span>Xem danh sach recordings</span>
-              </div>
-              <div className="scope-item">
-                <code>cloud_recording:read:list_recording_files</code>
-                <span>Xem chi tiet file recordings</span>
-              </div>
-              <div className="scope-item">
-                <code>cloud_recording:write:recording</code>
-                <span>Xoa recordings (vao thung rac)</span>
-              </div>
-              <div className="scope-item">
-                <code>user:read:list_users</code>
-                <span>Lay danh sach users trong account</span>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div className="guide-step">
-          <div className="step-number">6</div>
-          <div className="step-content">
-            <h4>Kich hoat App</h4>
-            <p>Vao tab <strong>Activation</strong> &rarr; bam <strong>Activate your app</strong></p>
-            <p>App chuyen sang trang thai Active la thanh cong.</p>
-          </div>
-        </div>
-
-        <div className="guide-step">
-          <div className="step-number">7</div>
-          <div className="step-content">
-            <h4>Nhap vao ung dung</h4>
-            <p>Quay lai Zoom Recording Downloader &rarr; vao trang <strong>Accounts</strong> &rarr; bam <strong>Add Account</strong></p>
-            <p>Dien 3 thong so da copy o Buoc 4 (Account ID, Client ID, Client Secret) va thong tin tai khoan.</p>
-            <p>Bam <strong>Save & Test Connection</strong> de kiem tra ket noi.</p>
-          </div>
-        </div>
+        <Step n={1} title="Đăng nhập Zoom Marketplace" desc={<>Truy cập <a href="https://marketplace.zoom.us" target="_blank" rel="noopener noreferrer">marketplace.zoom.us</a> và đăng nhập bằng tài khoản Zoom (tài khoản Admin hoặc Owner).</>} />
+        <Step n={2} title="Tạo App mới" desc={<>Vào menu <strong>Develop</strong> → <strong>Build App</strong>. Chọn loại: <strong>Server-to-Server OAuth</strong> → Bấm <strong>Create</strong>. Đặt tên app bất kỳ, ví dụ: "Recording Downloader".<div className="guide-warning">Lưu ý: Phải chọn đúng loại <strong>Server-to-Server OAuth</strong>, không phải OAuth hoặc JWT.</div></>} />
+        <Step n={3} title="Điền thông tin App" desc={<>Trong tab <strong>Information</strong>: điền App Name, Company Name, Developer Name và Email. Bấm <strong>Continue</strong> để sang bước tiếp.</>} />
+        <Step n={4} title="Copy 3 thông số quan trọng" desc={<>Trong tab <strong>App Credentials</strong>, copy 3 giá trị sau:<Credentials /><div className="guide-warning">Lưu ý: Client Secret chỉ hiển thị 1 lần. Hãy lưu lại ngay!</div></>} />
+        <Step n={5} title="Cấp quyền (Scopes)" desc={<>Vào tab <strong>Scopes</strong> → bấm <strong>+ Add Scopes</strong>. Tìm và thêm các quyền sau:<Scopes /></>} />
+        <Step n={6} title="Kích hoạt App" desc={<>Vào tab <strong>Activation</strong> → bấm <strong>Activate your app</strong>. App chuyển sang trạng thái Active là thành công.</>} />
+        <Step n={7} title="Nhập vào ứng dụng" desc={<>Quay lại Zoom Recording Downloader → vào trang <strong>Tài Khoản</strong> → bấm <strong>Thêm Tài Khoản</strong>. Điền 3 thông số đã copy ở Bước 4. Bấm <strong>Lưu & Kiểm Tra Kết Nối</strong>.</>} />
       </div>
-
       <div className="guide-info-box">
-        <strong>Meo:</strong> Moi tai khoan Zoom can 1 app rieng. Neu ban quan ly nhieu tai khoan Zoom, lap lai quy trinh tren cho tung tai khoan.
+        <strong>Mẹo:</strong> Mỗi tài khoản Zoom cần 1 app riêng. Nếu bạn quản lý nhiều tài khoản Zoom, lặp lại quy trình trên cho từng tài khoản.
       </div>
     </div>
   );
 }
 
-function RecordingsSection() {
+function RecordingsSection({ lang }: { lang: string }) {
+  if (lang === 'en') return (
+    <div className="guide-section">
+      <h3>Download Recordings</h3>
+      <div className="guide-steps">
+        <Step n={1} title="Sync Recording List" desc='Go to Recordings page → click "Sync All" (or select a specific account). The app will fetch recordings from Zoom Cloud.' />
+        <Step n={2} title="Download Individual Recording" desc="Click Download on a recording → select files to download → choose target device → click Download." />
+        <Step n={3} title="Batch Download" desc='Click "Batch Download" → check multiple recordings → choose device → click Download. All files from selected recordings will be queued.' />
+        <Step n={4} title="Track Progress" desc="Go to Downloads page to see status, progress %, speed and time remaining. You can Pause / Resume / Cancel / Retry each file." />
+      </div>
+      <div className="guide-info-box">
+        <strong>Auto sync:</strong> Enable "Auto Sync" on the Recordings page to automatically sync and download recordings on a schedule.
+      </div>
+    </div>
+  );
+
   return (
     <div className="guide-section">
-      <h3>Tai Recordings</h3>
-
+      <h3>Tải Bản Ghi</h3>
       <div className="guide-steps">
-        <div className="guide-step">
-          <div className="step-number">1</div>
-          <div className="step-content">
-            <h4>Dong bo danh sach</h4>
-            <p>Vao trang <strong>Recordings</strong> &rarr; bam <strong>Sync All</strong> (hoac chon account cu the roi bam Sync).</p>
-            <p>Ung dung se lay danh sach recordings tu Zoom Cloud trong khoang thoi gian da chon.</p>
-          </div>
-        </div>
-
-        <div className="guide-step">
-          <div className="step-number">2</div>
-          <div className="step-content">
-            <h4>Tai tung recording</h4>
-            <p>Bam <strong>Download</strong> tren recording can tai &rarr; chon cac file muon tai (video, audio, chat...) &rarr; chon thiet bi dich &rarr; bam Download.</p>
-          </div>
-        </div>
-
-        <div className="guide-step">
-          <div className="step-number">3</div>
-          <div className="step-content">
-            <h4>Tai nhieu recordings cung luc (Batch)</h4>
-            <p>Bam nut <strong>Batch Download</strong> &rarr; tich chon cac recordings can tai &rarr; chon thiet bi &rarr; bam Download.</p>
-            <p>Tat ca files cua cac recordings da chon se duoc dua vao hang doi tai.</p>
-          </div>
-        </div>
-
-        <div className="guide-step">
-          <div className="step-number">4</div>
-          <div className="step-content">
-            <h4>Theo doi tien trinh</h4>
-            <p>Vao trang <strong>Downloads</strong> de xem trang thai tai ve, tien trinh %, toc do va thoi gian con lai.</p>
-            <p>Co the Pause / Resume / Cancel / Retry tung file.</p>
-          </div>
-        </div>
+        <Step n={1} title="Đồng bộ danh sách" desc='Vào trang Bản Ghi → bấm "Đồng Bộ Tất Cả" (hoặc chọn tài khoản cụ thể). Ứng dụng sẽ lấy danh sách bản ghi từ Zoom Cloud.' />
+        <Step n={2} title="Tải từng bản ghi" desc="Bấm Tải Về trên bản ghi cần tải → chọn các file muốn tải (video, audio, chat...) → chọn thiết bị đích → bấm Tải Về." />
+        <Step n={3} title="Tải hàng loạt (Batch)" desc='Bấm nút "Tải Hàng Loạt" → tích chọn các bản ghi cần tải → chọn thiết bị → bấm Tải Về. Tất cả file của các bản ghi đã chọn sẽ được đưa vào hàng đợi.' />
+        <Step n={4} title="Theo dõi tiến trình" desc="Vào trang Tải Về để xem trạng thái tải, tiến trình %, tốc độ và thời gian còn lại. Có thể Tạm Dừng / Tiếp Tục / Hủy / Thử Lại từng file." />
       </div>
-
       <div className="guide-info-box">
-        <strong>Tu dong dong bo:</strong> Bat "Auto Sync" tren trang Recordings de ung dung tu dong dong bo va tai recordings theo lich hen.
+        <strong>Tự động đồng bộ:</strong> Bật "Tự Động Đồng Bộ" trên trang Bản Ghi để ứng dụng tự động đồng bộ và tải bản ghi theo lịch hẹn.
       </div>
     </div>
   );
 }
 
-function AgentSection() {
+function AgentSection({ lang }: { lang: string }) {
+  if (lang === 'en') return (
+    <div className="guide-section">
+      <h3>Setup Download Agent</h3>
+      <p>The Download Agent lets you download files to a different computer, controlled from the Web UI.</p>
+      <div className="guide-steps">
+        <Step n={1} title="Download ZoomAgent.exe" desc="Download ZoomAgent.exe from the GitHub Releases page. No need to install Node.js or any other software." />
+        <Step n={2} title="Run and Configure" desc={<>Run <strong>ZoomAgent.exe</strong>. On first launch, the browser will open automatically for setup:<ul><li><strong>Device name</strong>: display name on Web UI (e.g., "Office Laptop")</li><li><strong>Download folder</strong>: where to save files (e.g., D:\ZoomRecordings)</li><li><strong>Server URL</strong>: keep default (pre-configured)</li><li><strong>Secret Key</strong>: keep default (pre-configured)</li></ul>Click <strong>Save</strong> → Agent will connect to the server automatically.</>} />
+        <Step n={3} title="Usage" desc="Once connected, the device name appears in the Device dropdown on the Web UI. When downloading, select the Agent device instead of Server (local)." />
+      </div>
+      <div className="guide-info-box">
+        <strong>System Tray:</strong> The Agent runs in the system tray (bottom-right corner). Right-click the icon to open settings, open web, or quit.
+      </div>
+    </div>
+  );
+
   return (
     <div className="guide-section">
-      <h3>Cai Dat Download Agent</h3>
-      <p>Download Agent cho phep ban tai file ve mot may tinh khac, dieu khien tu Web UI.</p>
-
+      <h3>Cài Đặt Download Agent</h3>
+      <p>Download Agent cho phép bạn tải file về một máy tính khác, điều khiển từ Web UI.</p>
       <div className="guide-steps">
-        <div className="guide-step">
-          <div className="step-number">1</div>
-          <div className="step-content">
-            <h4>Tai ZoomAgent.exe</h4>
-            <p>Tai file <strong>ZoomAgent.exe</strong> tu trang GitHub Releases cua du an.</p>
-            <p>Khong can cai dat Node.js hay bat ky phan mem nao khac.</p>
-          </div>
-        </div>
-
-        <div className="guide-step">
-          <div className="step-number">2</div>
-          <div className="step-content">
-            <h4>Chay va cau hinh</h4>
-            <p>Chay file <strong>ZoomAgent.exe</strong>. Lan dau se tu dong mo trinh duyet de cau hinh:</p>
-            <ul>
-              <li><strong>Ten thiet bi</strong>: ten hien thi tren Web UI (VD: "Laptop Van Phong")</li>
-              <li><strong>Thu muc tai ve</strong>: noi luu file (VD: D:\ZoomRecordings)</li>
-              <li><strong>Server URL</strong>: giu mac dinh (da cau hinh san)</li>
-              <li><strong>Secret Key</strong>: giu mac dinh (da cau hinh san)</li>
-            </ul>
-            <p>Bam <strong>Luu Cau Hinh</strong> &rarr; Agent se tu dong ket noi den server.</p>
-          </div>
-        </div>
-
-        <div className="guide-step">
-          <div className="step-number">3</div>
-          <div className="step-content">
-            <h4>Su dung</h4>
-            <p>Sau khi Agent ket noi, ten thiet bi se hien trong danh sach <strong>Device</strong> tren Web UI.</p>
-            <p>Khi tai recording, chon thiet bi Agent thay vi "Server (local)" &rarr; file se tai ve may co Agent.</p>
-          </div>
-        </div>
+        <Step n={1} title="Tải ZoomAgent.exe" desc="Tải file ZoomAgent.exe từ trang GitHub Releases của dự án. Không cần cài đặt Node.js hay bất kỳ phần mềm nào khác." />
+        <Step n={2} title="Chạy và cấu hình" desc={<>Chạy file <strong>ZoomAgent.exe</strong>. Lần đầu sẽ tự động mở trình duyệt để cấu hình:<ul><li><strong>Tên thiết bị</strong>: tên hiển thị trên Web UI (VD: "Laptop Văn Phòng")</li><li><strong>Thư mục tải về</strong>: nơi lưu file (VD: D:\ZoomRecordings)</li><li><strong>Server URL</strong>: giữ mặc định (đã cấu hình sẵn)</li><li><strong>Secret Key</strong>: giữ mặc định (đã cấu hình sẵn)</li></ul>Bấm <strong>Lưu Cấu Hình</strong> → Agent sẽ tự động kết nối đến server.</>} />
+        <Step n={3} title="Sử dụng" desc="Sau khi Agent kết nối, tên thiết bị sẽ hiện trong danh sách Thiết Bị trên Web UI. Khi tải bản ghi, chọn thiết bị Agent thay vì Server (máy chủ)." />
       </div>
-
       <div className="guide-info-box">
-        <strong>System Tray:</strong> Agent chay an o goc phai taskbar. Click phai icon de mo cai dat, mo web, hoac thoat.
+        <strong>System Tray:</strong> Agent chạy ẩn ở góc phải thanh taskbar. Click phải icon để mở cài đặt, mở web, hoặc thoát.
       </div>
-
       <div className="guide-info-box">
-        <strong>Thay doi cau hinh:</strong> Mo trinh duyet tai <code>http://127.0.0.1:17710</code> hoac click phai icon tray &rarr; "Mo Cai Dat".
+        <strong>Thay đổi cấu hình:</strong> Mở trình duyệt tại <code>http://127.0.0.1:17710</code> hoặc click phải icon tray → "Mở Cài Đặt".
       </div>
     </div>
   );
 }
 
-function FaqSection() {
+function FaqSection({ lang }: { lang: string }) {
+  const faqs = lang === 'en' ? [
+    { q: 'Why are there no recordings after Sync?', a: 'Check the date range filter (From / To). By default, only recordings from the last 30 days are shown. Expand the date range if needed.' },
+    { q: '"Invalid credentials" error when adding account?', a: 'Verify that Account ID, Client ID, and Client Secret are correct. Make sure the app on Zoom Marketplace has been Activated.' },
+    { q: 'Download is slow or fails?', a: 'Zoom recordings can be very large (several GB). Ensure a stable internet connection. If it fails, go to Downloads and click Retry.' },
+    { q: 'Are deleted recordings gone permanently?', a: 'No. The app only moves them to Zoom Trash. You can recover them within 30 days from the Zoom website.' },
+    { q: 'Agent cannot connect?', a: 'Check: (1) Server is running, (2) URL is correct, (3) Secret key matches, (4) Firewall is not blocking WebSocket connections.' },
+    { q: 'How to update the Agent?', a: 'Open Agent UI (http://127.0.0.1:17710) → click "Check Update". If a new version is available, download the new ZoomAgent.exe and replace the old one.' },
+  ] : [
+    { q: 'Tại sao không thấy bản ghi sau khi Đồng Bộ?', a: 'Kiểm tra khoảng thời gian lọc (Từ ngày / Đến ngày). Mặc định chỉ hiện bản ghi trong 30 ngày gần nhất. Mở rộng khoảng thời gian nếu cần.' },
+    { q: 'Lỗi "Invalid credentials" khi thêm tài khoản?', a: 'Kiểm tra lại Account ID, Client ID, Client Secret đã nhập đúng chưa. Đảm bảo app trên Zoom Marketplace đã được Activate.' },
+    { q: 'Tải về chậm hoặc bị lỗi?', a: 'File ghi hình Zoom có thể rất lớn (vài GB). Đảm bảo kết nối internet ổn định. Nếu lỗi, vào trang Tải Về và bấm Thử Lại.' },
+    { q: 'Xóa bản ghi có mất vĩnh viễn không?', a: 'Không. Ứng dụng chỉ xóa vào thùng rác của Zoom. Bạn có thể khôi phục trong vòng 30 ngày từ trang web Zoom.' },
+    { q: 'Agent không kết nối được?', a: 'Kiểm tra: (1) Server đang chạy, (2) URL đúng, (3) Secret key khớp, (4) Firewall không chặn kết nối WebSocket.' },
+    { q: 'Làm sao để cập nhật Agent?', a: 'Mở giao diện Agent (http://127.0.0.1:17710) → bấm "Kiểm Tra Cập Nhật". Nếu có phiên bản mới, tải file ZoomAgent.exe mới thay thế file cũ.' },
+  ];
+
   return (
     <div className="guide-section">
-      <h3>Cau Hoi Thuong Gap</h3>
-
+      <h3>{lang === 'en' ? 'Frequently Asked Questions' : 'Câu Hỏi Thường Gặp'}</h3>
       <div className="faq-list">
-        <div className="faq-item">
-          <h4>Tai sao khong thay recordings sau khi Sync?</h4>
-          <p>Kiem tra khoang thoi gian loc (From / To date). Mac dinh chi hien recordings trong 30 ngay gan nhat. Mo rong khoang thoi gian neu can.</p>
-        </div>
-
-        <div className="faq-item">
-          <h4>Loi "Invalid credentials" khi them account?</h4>
-          <p>Kiem tra lai Account ID, Client ID, Client Secret da nhap dung chua. Dam bao app tren Zoom Marketplace da duoc Activate.</p>
-        </div>
-
-        <div className="faq-item">
-          <h4>Tai ve cham hoac bi loi?</h4>
-          <p>File ghi hinh Zoom co the rat lon (vai GB). Dam bao ket noi internet on dinh. Neu loi, vao trang Downloads va bam Retry.</p>
-        </div>
-
-        <div className="faq-item">
-          <h4>Xoa recordings co mat vinh vien khong?</h4>
-          <p>Khong. Ung dung chi xoa vao <strong>thung rac</strong> cua Zoom. Ban co the khoi phuc trong vong 30 ngay tu trang web Zoom.</p>
-        </div>
-
-        <div className="faq-item">
-          <h4>Agent khong ket noi duoc?</h4>
-          <p>Kiem tra: (1) Server dang chay, (2) URL dung, (3) Secret key khop, (4) Firewall khong chan ket noi WebSocket.</p>
-        </div>
-
-        <div className="faq-item">
-          <h4>Lam sao de cap nhat Agent?</h4>
-          <p>Mo giao dien Agent (http://127.0.0.1:17710) &rarr; bam "Kiem Tra Cap Nhat". Neu co phien ban moi, tai file ZoomAgent.exe moi thay the file cu.</p>
-        </div>
+        {faqs.map((f, i) => (
+          <div key={i} className="faq-item">
+            <h4>{f.q}</h4>
+            <p>{f.a}</p>
+          </div>
+        ))}
       </div>
+    </div>
+  );
+}
+
+// === Shared Components ===
+
+function Step({ n, title, desc }: { n: number; title: string; desc: React.ReactNode }) {
+  return (
+    <div className="guide-step">
+      <div className="step-number">{n}</div>
+      <div className="step-content">
+        <h4>{title}</h4>
+        <p>{typeof desc === 'string' ? desc : <>{desc}</>}</p>
+      </div>
+    </div>
+  );
+}
+
+function Credentials() {
+  return (
+    <div className="guide-credentials">
+      <div className="guide-credential-item">
+        <span className="credential-label">Account ID</span>
+        <span className="credential-desc">Mã định danh tài khoản Zoom</span>
+      </div>
+      <div className="guide-credential-item">
+        <span className="credential-label">Client ID</span>
+        <span className="credential-desc">Mã định danh ứng dụng</span>
+      </div>
+      <div className="guide-credential-item">
+        <span className="credential-label">Client Secret</span>
+        <span className="credential-desc">Mật khẩu bí mật (không chia sẻ)</span>
+      </div>
+    </div>
+  );
+}
+
+function Scopes() {
+  return (
+    <div className="guide-scopes">
+      <div className="scope-item"><code>cloud_recording:read:list_user_recordings</code><span>Xem danh sách bản ghi</span></div>
+      <div className="scope-item"><code>cloud_recording:read:list_recording_files</code><span>Xem chi tiết file</span></div>
+      <div className="scope-item"><code>cloud_recording:write:recording</code><span>Xóa bản ghi</span></div>
+      <div className="scope-item"><code>user:read:list_users</code><span>Lấy danh sách users</span></div>
     </div>
   );
 }

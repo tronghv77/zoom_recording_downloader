@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { api } from '../api/client';
+import { useTranslation } from '../i18n';
 import type { DownloadTask } from '../../shared/types';
 
 interface DownloadGroup {
@@ -15,6 +16,7 @@ interface DownloadGroup {
 }
 
 export function DownloadsPage() {
+  const { t } = useTranslation();
   const [tasks, setTasks] = useState<DownloadTask[]>([]);
   const [loading, setLoading] = useState(true);
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -91,15 +93,15 @@ export function DownloadsPage() {
   const totalCompleted = tasks.filter((t) => t.status === 'completed').length;
   const totalFailed = tasks.filter((t) => t.status === 'failed').length;
 
-  if (loading) return <div className="page"><div className="empty-state">Loading...</div></div>;
+  if (loading) return <div className="page"><div className="empty-state">{t('common.loading')}</div></div>;
 
   return (
     <div className="page">
       <div className="page-header">
-        <h2>Downloads</h2>
+        <h2>{t('downloads.title')}</h2>
         {tasks.length > 0 && (
           <span className="download-summary">
-            {totalActive} active &middot; {totalCompleted} completed &middot; {totalFailed} failed
+            {totalActive} {t('downloads.active')} &middot; {totalCompleted} {t('downloads.completed')} &middot; {totalFailed} {t('downloads.failed')}
           </span>
         )}
       </div>
@@ -107,7 +109,7 @@ export function DownloadsPage() {
       <div className="download-list">
         {groups.length === 0 && (
           <div className="empty-state">
-            No downloads yet. Go to Recordings and click Download to start.
+            {t('downloads.noDownloads')}
           </div>
         )}
 
@@ -157,12 +159,12 @@ export function DownloadsPage() {
                   <table>
                     <thead>
                       <tr>
-                        <th>File Type</th>
-                        <th>Format</th>
-                        <th>Size</th>
-                        <th>Progress</th>
-                        <th>Status</th>
-                        <th>Actions</th>
+                        <th>{t('downloads.fileType')}</th>
+                        <th>{t('downloads.format')}</th>
+                        <th>{t('downloads.size')}</th>
+                        <th>{t('downloads.progress')}</th>
+                        <th>{t('downloads.status')}</th>
+                        <th>{t('downloads.actions')}</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -181,8 +183,8 @@ export function DownloadsPage() {
                               </div>
                               <span className="file-progress-text">
                                 {task.status === 'downloading' ? `${task.progress}%` :
-                                 task.status === 'completed' ? 'Done' :
-                                 task.status === 'failed' ? 'Error' :
+                                 task.status === 'completed' ? t('downloads.done') :
+                                 task.status === 'failed' ? t('downloads.error') :
                                  task.status}
                               </span>
                             </div>
@@ -192,16 +194,16 @@ export function DownloadsPage() {
                           </td>
                           <td>
                             {task.status === 'downloading' && (
-                              <button className="btn btn-sm" onClick={(e) => { e.stopPropagation(); api.download.pause(task.id); }}>Pause</button>
+                              <button className="btn btn-sm" onClick={(e) => { e.stopPropagation(); api.download.pause(task.id); }}>{t('downloads.pause')}</button>
                             )}
                             {task.status === 'paused' && (
-                              <button className="btn btn-sm btn-primary" onClick={(e) => { e.stopPropagation(); api.download.resume(task.id); }}>Resume</button>
+                              <button className="btn btn-sm btn-primary" onClick={(e) => { e.stopPropagation(); api.download.resume(task.id); }}>{t('downloads.resume')}</button>
                             )}
                             {task.status === 'failed' && (
-                              <button className="btn btn-sm btn-primary" onClick={(e) => { e.stopPropagation(); api.download.retry(task.id); }}>Retry</button>
+                              <button className="btn btn-sm btn-primary" onClick={(e) => { e.stopPropagation(); api.download.retry(task.id); }}>{t('downloads.retry')}</button>
                             )}
                             {['queued', 'downloading', 'paused'].includes(task.status) && (
-                              <button className="btn btn-sm btn-danger" onClick={(e) => { e.stopPropagation(); api.download.cancel(task.id); }}>Cancel</button>
+                              <button className="btn btn-sm btn-danger" onClick={(e) => { e.stopPropagation(); api.download.cancel(task.id); }}>{t('downloads.cancel')}</button>
                             )}
                           </td>
                         </tr>

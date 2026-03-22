@@ -9,6 +9,7 @@ import { SettingsPage } from './pages/SettingsPage';
 import { GuidePage } from './pages/GuidePage';
 import { LoginPage } from './pages/LoginPage';
 import { isWeb } from './api/client';
+import { I18nProvider } from './i18n';
 
 export function App() {
   const [authenticated, setAuthenticated] = useState(isWeb ? false : true);
@@ -65,18 +66,20 @@ export function App() {
   }
 
   return (
-    <HashRouter>
-      <Layout>
-        <Routes>
-          <Route path="/" element={<Navigate to="/dashboard" replace />} />
-          <Route path="/dashboard" element={<DashboardPage />} />
-          <Route path="/accounts" element={<AccountsPage />} />
-          <Route path="/recordings" element={<RecordingsPage />} />
-          <Route path="/downloads" element={<DownloadsPage />} />
-          <Route path="/settings" element={<SettingsPage />} />
-          <Route path="/guide" element={<GuidePage />} />
-        </Routes>
-      </Layout>
-    </HashRouter>
+    <I18nProvider>
+      <HashRouter>
+        <Layout>
+          <Routes>
+            <Route path="/" element={<Navigate to="/dashboard" replace />} />
+            <Route path="/dashboard" element={<DashboardPage />} />
+            <Route path="/accounts" element={<AccountsPage />} />
+            <Route path="/recordings" element={<RecordingsPage />} />
+            <Route path="/downloads" element={<DownloadsPage />} />
+            <Route path="/settings" element={<SettingsPage />} />
+            <Route path="/guide" element={<GuidePage />} />
+          </Routes>
+        </Layout>
+      </HashRouter>
+    </I18nProvider>
   );
 }

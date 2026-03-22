@@ -316,7 +316,7 @@ if (require.main === module) {
         config = { ...saved };
         console.log(`  Config:  ${getConfigFilePath()}`);
       } else if (NO_GUI) {
-        console.log('  Lan dau su dung — vui long cau hinh:');
+        console.log('  Lần đầu sử dụng — vui lòng cấu hình:');
         const newConfig = await promptSetup();
         config = { ...newConfig };
       } else {
@@ -398,10 +398,10 @@ if (require.main === module) {
         }, 1000);
       }
 
-      console.log(`  Tip: Mo trinh duyet -> http://127.0.0.1:${uiPort}`);
-      console.log('  Tip: Click phai icon tray de mo cai dat');
+      console.log(`  Tip: Mở trình duyệt -> http://127.0.0.1:${uiPort}`);
+      console.log('  Tip: Click phải icon tray để mở cài đặt');
     } else {
-      console.log('  Tip: Chay voi --setup de thay doi cau hinh');
+      console.log('  Tip: Chạy với --setup để thay đổi cấu hình');
     }
     console.log('');
 

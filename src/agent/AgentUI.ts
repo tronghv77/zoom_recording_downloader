@@ -243,7 +243,7 @@ export function getSettingsHTML(): string {
   <!-- Status -->
   <div class="status-bar">
     <div class="status-dot" id="statusDot"></div>
-    <span class="status-text" id="statusText">Dang ket noi...</span>
+    <span class="status-text" id="statusText">Đang kết nối...</span>
     <span class="status-device" id="statusDevice"></span>
   </div>
 
@@ -254,13 +254,13 @@ export function getSettingsHTML(): string {
 
   <!-- Settings -->
   <div class="card">
-    <div class="card-title">Cai Dat</div>
+    <div class="card-title">Cài Đặt</div>
     <div class="form-group">
-      <label>Ten thiet bi</label>
+      <label>Tên thiết bị</label>
       <input type="text" id="deviceName" placeholder="VD: Laptop Van Phong">
     </div>
     <div class="form-group">
-      <label>Thu muc tai ve</label>
+      <label>Thư mục tải về</label>
       <input type="text" id="downloadPath" placeholder="VD: D:\\\\ZoomRecordings">
     </div>
     <div class="form-group">
@@ -271,23 +271,23 @@ export function getSettingsHTML(): string {
       <label>Secret Key</label>
       <input type="password" id="secret" placeholder="Secret key">
     </div>
-    <button class="btn btn-primary" onclick="saveConfig()">Luu Cau Hinh</button>
+    <button class="btn btn-primary" onclick="saveConfig()">Lưu Cấu Hình</button>
   </div>
 
   <!-- Actions -->
   <div class="card">
-    <div class="card-title">Hanh Dong</div>
+    <div class="card-title">Hành Động</div>
     <div class="btn-row">
-      <button class="btn btn-secondary" onclick="openWeb()">Mo Web Quan Ly</button>
-      <button class="btn btn-success" onclick="checkUpdate()">Kiem Tra Cap Nhat</button>
+      <button class="btn btn-secondary" onclick="openWeb()">Mở Web Quản Lý</button>
+      <button class="btn btn-success" onclick="checkUpdate()">Kiểm Tra Cập Nhật</button>
     </div>
   </div>
 
   <!-- Downloads -->
   <div class="card">
-    <div class="card-title">Dang Tai (<span id="downloadCount">0</span>)</div>
+    <div class="card-title">Đang Tải (<span id="downloadCount">0</span>)</div>
     <div id="downloadList">
-      <div class="empty-text">Khong co file nao dang tai</div>
+      <div class="empty-text">Không có file nào đang tải</div>
     </div>
   </div>
 </div>
@@ -332,12 +332,12 @@ export function getSettingsHTML(): string {
       });
       const result = await res.json();
       if (result.ok) {
-        showToast('Da luu cau hinh! Dang ket noi lai...', 'success');
+        showToast('Đã lưu cấu hình! Đang kết nối lại...', 'success');
       } else {
-        showToast('Loi: ' + result.error, 'error');
+        showToast('Lỗi: ' + result.error, 'error');
       }
     } catch(e) {
-      showToast('Khong the luu cau hinh', 'error');
+      showToast('Không thể lưu cấu hình', 'error');
     }
   }
 
@@ -346,7 +346,7 @@ export function getSettingsHTML(): string {
     try {
       await fetch('/api/open-web', { method: 'POST' });
     } catch(e) {
-      showToast('Khong the mo trinh duyet', 'error');
+      showToast('Không thể mở trình duyệt', 'error');
     }
   }
 
@@ -358,16 +358,16 @@ export function getSettingsHTML(): string {
       const banner = document.getElementById('updateBanner');
       const text = document.getElementById('updateText');
       if (info.hasUpdate) {
-        text.innerHTML = 'Phien ban moi: v' + info.latestVersion +
+        text.innerHTML = 'Phiên bản mới: v' + info.latestVersion +
           ' — <a href="' + info.downloadUrl + '" target="_blank">Tai ve</a>';
         banner.classList.add('show');
-        showToast('Co phien ban moi!', 'info');
+        showToast('Có phiên bản mới!', 'info');
       } else {
         banner.classList.remove('show');
-        showToast('Ban dang su dung phien ban moi nhat', 'success');
+        showToast('Bạn đang sử dụng phiên bản mới nhất', 'success');
       }
     } catch(e) {
-      showToast('Khong the kiem tra cap nhat', 'error');
+      showToast('Không thể kiểm tra cập nhật', 'error');
     }
   }
 
@@ -384,7 +384,7 @@ export function getSettingsHTML(): string {
       const dot = document.getElementById('statusDot');
       const txt = document.getElementById('statusText');
       dot.className = 'status-dot ' + s.connectionStatus;
-      const labels = { connected: 'Da ket noi', disconnected: 'Mat ket noi', connecting: 'Dang ket noi...' };
+      const labels = { connected: 'Đã kết nối', disconnected: 'Mất kết nối', connecting: 'Đang kết nối...' };
       txt.textContent = labels[s.connectionStatus] || s.connectionStatus;
 
       // Device name
@@ -404,7 +404,7 @@ export function getSettingsHTML(): string {
         ).join('');
       } else {
         count.textContent = '0';
-        list.innerHTML = '<div class="empty-text">Khong co file nao dang tai</div>';
+        list.innerHTML = '<div class="empty-text">Không có file nào đang tải</div>';
       }
     } catch(e) { /* ignore */ }
   }

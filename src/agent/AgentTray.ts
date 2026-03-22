@@ -27,17 +27,17 @@ $icon.Visible = $true
 $menu = New-Object System.Windows.Forms.ContextMenuStrip
 
 $itemSettings = New-Object System.Windows.Forms.ToolStripMenuItem
-$itemSettings.Text = "Mo Cai Dat"
+$itemSettings.Text = "Mở Cài Đặt"
 $itemSettings.Add_Click({ Write-Host "TRAY:open-settings" })
 
 $itemWeb = New-Object System.Windows.Forms.ToolStripMenuItem
-$itemWeb.Text = "Mo Web Quan Ly"
+$itemWeb.Text = "Mở Web Quản Lý"
 $itemWeb.Add_Click({ Write-Host "TRAY:open-web" })
 
 $sep = New-Object System.Windows.Forms.ToolStripSeparator
 
 $itemQuit = New-Object System.Windows.Forms.ToolStripMenuItem
-$itemQuit.Text = "Thoat"
+$itemQuit.Text = "Thoát"
 $itemQuit.Add_Click({
   Write-Host "TRAY:quit"
   $icon.Visible = $false

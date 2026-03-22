@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { api } from '../api/client';
+import { useTranslation } from '../i18n';
 import type { ZoomAccount, CreateAccountInput } from '../../shared/types';
 
 export function AccountsPage() {
@@ -163,6 +164,7 @@ interface AccountFormProps {
 }
 
 function AccountForm({ account, onSaved, onCancel }: AccountFormProps) {
+  const { t } = useTranslation();
   const isEdit = !!account;
   const [form, setForm] = useState<CreateAccountInput>({
     name: account?.name || '',
@@ -214,13 +216,13 @@ function AccountForm({ account, onSaved, onCancel }: AccountFormProps) {
   return (
     <div className="account-form-layout">
     <form className="form-card" onSubmit={handleSubmit}>
-      <h3>{isEdit ? 'Edit Account' : 'Add Zoom Account'}</h3>
+      <h3>{isEdit ? t('accounts.editAccount') : t('accounts.addZoomAccount')}</h3>
 
       {formError && <div className="alert alert-error">{formError}</div>}
 
       <div className="form-row">
         <div className="form-group">
-          <label>Account Name</label>
+          <label>{t('accounts.name')}</label>
           <input
             value={form.name}
             onChange={(e) => updateField('name', e.target.value)}
@@ -241,19 +243,19 @@ function AccountForm({ account, onSaved, onCancel }: AccountFormProps) {
       </div>
 
       <div className="form-group">
-        <label>Account ID (Server-to-Server OAuth)</label>
+        <label>{t('accounts.accountId')}</label>
         <input
           value={form.accountId}
           onChange={(e) => updateField('accountId', e.target.value)}
           placeholder="From Zoom App > General > Account ID"
           required
         />
-        <small>Found in Zoom Marketplace → Your App → App Credentials</small>
+        <small>{t('accounts.accountIdHint')}</small>
       </div>
 
       <div className="form-row">
         <div className="form-group">
-          <label>Client ID</label>
+          <label>{t('accounts.clientId')}</label>
           <input
             value={form.clientId}
             onChange={(e) => updateField('clientId', e.target.value)}
@@ -262,7 +264,7 @@ function AccountForm({ account, onSaved, onCancel }: AccountFormProps) {
           />
         </div>
         <div className="form-group">
-          <label>Client Secret</label>
+          <label>{t('accounts.clientSecret')}</label>
           <input
             type="password"
             value={form.clientSecret}
@@ -275,10 +277,10 @@ function AccountForm({ account, onSaved, onCancel }: AccountFormProps) {
 
       <div className="form-actions">
         <button type="submit" className="btn btn-primary" disabled={saving}>
-          {saving ? 'Saving...' : isEdit ? 'Update Account' : 'Save & Test Connection'}
+          {saving ? t('accounts.saving') : isEdit ? t('accounts.update') : t('accounts.saveTest')}
         </button>
         <button type="button" className="btn" onClick={onCancel}>
-          Cancel
+          {t('accounts.cancel')}
         </button>
       </div>
     </form>
@@ -286,23 +288,23 @@ function AccountForm({ account, onSaved, onCancel }: AccountFormProps) {
     {showHelp && (
       <div className="account-help-panel">
         <div className="help-panel-header">
-          <h4>Huong dan lay thong so</h4>
-          <button className="btn btn-sm" onClick={() => setShowHelp(false)}>Dong</button>
+          <h4>{t('help.title')}</h4>
+          <button className="btn btn-sm" onClick={() => setShowHelp(false)}>{t('help.close')}</button>
         </div>
         <div className="help-panel-body">
           <div className="help-step">
-            <strong>Buoc 1:</strong> Truy cap{' '}
+            <strong>Bước 1:</strong> {t('help.step1')}{' '}
             <a href="https://marketplace.zoom.us" target="_blank" rel="noopener noreferrer">marketplace.zoom.us</a>
-            {' '}&rarr; Dang nhap
+            {' '}{t('help.step1b')}
           </div>
           <div className="help-step">
-            <strong>Buoc 2:</strong> Develop &rarr; Build App &rarr; Chon <strong>Server-to-Server OAuth</strong> &rarr; Create
+            <strong>Bước 2:</strong> {t('help.step2')} <strong>Server-to-Server OAuth</strong> {t('help.step2b')}
           </div>
           <div className="help-step">
-            <strong>Buoc 3:</strong> Dien thong tin app (ten, email) &rarr; Continue
+            <strong>Bước 3:</strong> {t('help.step3')}
           </div>
           <div className="help-step">
-            <strong>Buoc 4:</strong> Tab <strong>App Credentials</strong> &rarr; Copy 3 thong so:
+            <strong>Bước 4:</strong> {t('help.step4')} <strong>App Credentials</strong> {t('help.step4b')}
             <ul>
               <li><strong>Account ID</strong></li>
               <li><strong>Client ID</strong></li>
@@ -310,7 +312,7 @@ function AccountForm({ account, onSaved, onCancel }: AccountFormProps) {
             </ul>
           </div>
           <div className="help-step">
-            <strong>Buoc 5:</strong> Tab <strong>Scopes</strong> &rarr; Add Scopes:
+            <strong>Bước 5:</strong> {t('help.step5')} <strong>Scopes</strong> {t('help.step5b')}
             <ul>
               <li><code>cloud_recording:read:list_user_recordings</code></li>
               <li><code>cloud_recording:read:list_recording_files</code></li>
@@ -319,17 +321,17 @@ function AccountForm({ account, onSaved, onCancel }: AccountFormProps) {
             </ul>
           </div>
           <div className="help-step">
-            <strong>Buoc 6:</strong> Tab <strong>Activation</strong> &rarr; <strong>Activate your app</strong>
+            <strong>Bước 6:</strong> {t('help.step6')} <strong>Activation</strong> {t('help.step6b')} <strong>Activate your app</strong>
           </div>
           <div className="help-step">
-            <strong>Buoc 7:</strong> Dan 3 thong so vao form ben trai &rarr; <strong>Save & Test Connection</strong>
+            <strong>Bước 7:</strong> {t('help.step7')} <strong>{t('accounts.saveTest')}</strong>
           </div>
         </div>
       </div>
     )}
     {!showHelp && !isEdit && (
       <button className="btn btn-sm help-toggle-btn" onClick={() => setShowHelp(true)}>
-        Hien huong dan
+        {t('help.show')}
       </button>
     )}
     </div>

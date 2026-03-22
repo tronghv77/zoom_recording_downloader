@@ -63,12 +63,12 @@ export async function promptSetup(existing?: Partial<SavedConfig>): Promise<Save
 
   console.log('');
   console.log('╔══════════════════════════════════════════════╗');
-  console.log('║       Zoom Agent - Cau Hinh Thiet Bi        ║');
+  console.log('║       Zoom Agent - Cấu Hình Thiết Bị        ║');
   console.log('╚══════════════════════════════════════════════╝');
   console.log('');
 
-  const deviceName = await ask(rl, '  Ten thiet bi', existing?.deviceName || os.hostname());
-  const downloadPath = await ask(rl, '  Thu muc tai ve', existing?.downloadPath || path.resolve('./downloads'));
+  const deviceName = await ask(rl, '  Tên thiết bị', existing?.deviceName || os.hostname());
+  const downloadPath = await ask(rl, '  Thư mục tải về', existing?.downloadPath || path.resolve('./downloads'));
   const serverUrl = await ask(rl, '  Server URL', existing?.serverUrl || DEFAULT_SERVER);
   const secret = await ask(rl, '  Secret key', existing?.secret || DEFAULT_SECRET);
 
@@ -78,7 +78,7 @@ export async function promptSetup(existing?: Partial<SavedConfig>): Promise<Save
   saveConfig(config);
 
   console.log('');
-  console.log('  Da luu cau hinh thanh cong!');
+  console.log('  Đã lưu cấu hình thành công!');
   console.log('');
 
   return config;
