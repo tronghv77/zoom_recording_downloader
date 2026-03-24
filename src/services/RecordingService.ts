@@ -40,7 +40,9 @@ export class RecordingService implements IRecordingService {
 
       for (const meeting of meetings) {
         const uuid = String(meeting.uuid || meeting.id);
-        const exists = this.recordingRepo.findByUuid(uuid);
+        // Check base UUID and session UUIDs (for multi-session recordings)
+        const exists = this.recordingRepo.findByUuid(uuid)
+          || this.recordingRepo.findByUuid(`${uuid}__session_1`);
         if (!exists) {
           this.recordingRepo.createFromZoomData(accountId, meeting);
           newCount++;

@@ -99,43 +99,75 @@ export class RecordingRepository {
   }
 
   createFromZoomData(accountId: string, meetingData: any): Recording {
-    const recordingId = randomUUID();
-    const uuid = String(meetingData.uuid || meetingData.id);
+    const files = meetingData.recording_files || [];
+    const baseUuid = String(meetingData.uuid || meetingData.id);
 
-    this.db.run(
-      `INSERT INTO recordings (id, account_id, meeting_id, uuid, meeting_topic, host_email, start_time, duration, total_size)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [
-        recordingId,
-        accountId,
-        String(meetingData.id),
-        uuid,
-        meetingData.topic || 'Untitled',
-        meetingData.host_email || '',
-        meetingData.start_time || new Date().toISOString(),
-        meetingData.duration || 0,
-        meetingData.total_size || 0,
-      ],
-    );
+    // Group files by recording_start to separate multiple recording sessions
+    const sessions = new Map<string, any[]>();
+    for (const file of files) {
+      const sessionKey = file.recording_start || meetingData.start_time || 'default';
+      if (!sessions.has(sessionKey)) sessions.set(sessionKey, []);
+      sessions.get(sessionKey)!.push(file);
+    }
 
-    for (const file of meetingData.recording_files || []) {
+    const sessionEntries = [...sessions.entries()].sort(([a], [b]) => a.localeCompare(b));
+    let firstRecording: Recording | null = null;
+
+    for (let i = 0; i < sessionEntries.length; i++) {
+      const [sessionStart, sessionFiles] = sessionEntries[i];
+      const sessionUuid = sessionEntries.length > 1 ? `${baseUuid}__session_${i + 1}` : baseUuid;
+
+      // Skip if this session already exists
+      if (this.findByUuid(sessionUuid)) continue;
+
+      const recordingId = randomUUID();
+      const sessionSize = sessionFiles.reduce((sum: number, f: any) => sum + (f.file_size || 0), 0);
+
+      // Calculate session duration from recording_start/recording_end
+      let sessionDuration = meetingData.duration || 0;
+      if (sessionFiles[0]?.recording_start && sessionFiles[0]?.recording_end) {
+        const start = new Date(sessionFiles[0].recording_start).getTime();
+        const end = new Date(sessionFiles[0].recording_end).getTime();
+        sessionDuration = Math.round((end - start) / 60000);
+      }
+
       this.db.run(
-        `INSERT INTO recording_files (id, recording_id, file_type, file_extension, file_size, download_url, play_url)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO recordings (id, account_id, meeting_id, uuid, meeting_topic, host_email, start_time, duration, total_size)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
-          randomUUID(),
           recordingId,
-          file.recording_type || 'unknown',
-          file.file_extension || 'mp4',
-          file.file_size || 0,
-          file.download_url || '',
-          file.play_url || null,
+          accountId,
+          String(meetingData.id),
+          sessionUuid,
+          meetingData.topic || 'Untitled',
+          meetingData.host_email || '',
+          sessionStart !== 'default' ? sessionStart : (meetingData.start_time || new Date().toISOString()),
+          sessionDuration,
+          sessionSize,
         ],
       );
+
+      for (const file of sessionFiles) {
+        this.db.run(
+          `INSERT INTO recording_files (id, recording_id, file_type, file_extension, file_size, download_url, play_url)
+           VALUES (?, ?, ?, ?, ?, ?, ?)`,
+          [
+            randomUUID(),
+            recordingId,
+            file.recording_type || 'unknown',
+            file.file_extension || 'mp4',
+            file.file_size || 0,
+            file.download_url || '',
+            file.play_url || null,
+          ],
+        );
+      }
+
+      if (!firstRecording) firstRecording = this.findById(recordingId)!;
     }
 
     saveDatabase();
-    return this.findById(recordingId)!;
+    return firstRecording || this.findById(randomUUID())!;
   }
 
   updateStatus(id: string, status: RecordingStatus): void {
