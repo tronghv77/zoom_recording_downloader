@@ -306,7 +306,7 @@ export function RecordingsPage() {
     try {
       setRenaming(true);
       setError(null);
-      await api.recording.rename(renamingId, renameValue.trim(), false);
+      await api.recording.rename(renamingId, renameValue.trim(), true);
       setSyncResult('Renamed successfully');
       setRenamingId(null);
       loadRecordings();
