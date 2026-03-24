@@ -75,6 +75,7 @@ const api = {
   system: {
     selectDirectory: () => ipcRenderer.invoke('system:selectDirectory'),
     getAppVersion: () => ipcRenderer.invoke('system:getAppVersion'),
+    openFolder: (path: string) => ipcRenderer.invoke('system:openFolder', path),
   },
 };
 

@@ -762,6 +762,51 @@ tr:hover td {
   background: rgba(99, 102, 241, 0.06);
 }
 
+/* Meeting Group — recurring meetings with same ID */
+.meeting-group {
+  margin-bottom: 4px;
+}
+
+.meeting-group-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px;
+  background: var(--bg-card);
+  border-radius: 12px 12px 0 0;
+  border: 1px solid var(--border);
+  border-bottom: none;
+  font-weight: 600;
+}
+
+.meeting-group-topic {
+  font-size: 1.05em;
+  color: var(--text-primary);
+}
+
+.meeting-group-count {
+  margin-left: auto;
+  font-size: 0.85em;
+  color: var(--text-muted);
+  font-weight: 400;
+}
+
+.meeting-group-header + .recording-card,
+.recording-card.grouped-card {
+  border-radius: 0;
+  margin-bottom: 0;
+  border-top: 1px solid var(--border);
+}
+
+.meeting-group .recording-card.grouped-card:last-child {
+  border-radius: 0 0 12px 12px;
+}
+
+.recording-card.grouped-card {
+  margin-left: 16px;
+  border-left: 3px solid var(--border);
+}
+
 /* Download badge */
 .download-badge {
   font-size: 11px;

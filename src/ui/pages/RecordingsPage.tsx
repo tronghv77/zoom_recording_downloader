@@ -507,8 +507,23 @@ export function RecordingsPage() {
       ) : (
         <>
           <div className="recording-list">
-            {recordings.map((rec) => (
-              <div key={rec.id} className={`recording-card ${batchMode && selectedRecordings.has(rec.id) ? 'batch-selected' : ''}`}>
+            {groupByMeetingId(recordings).map((group) => (
+              <div key={group.meetingId} className="meeting-group">
+                {/* Meeting Group Header — shown when multiple recordings share same meeting ID */}
+                {group.recordings.length > 1 && (
+                  <div className="meeting-group-header">
+                    <span className="meeting-id-tag" style={{ background: getMeetingColor(group.meetingId) }}>
+                      {group.meetingId}
+                    </span>
+                    <span className="meeting-group-topic">{group.topic}</span>
+                    <span className="meeting-group-count">
+                      {group.recordings.length} {t('recordings.sessions')} &middot; {group.totalFiles} {t('recordings.files')} &middot; {formatSize(group.totalSize)}
+                    </span>
+                  </div>
+                )}
+
+                {group.recordings.map((rec) => (
+              <div key={rec.id} className={`recording-card ${batchMode && selectedRecordings.has(rec.id) ? 'batch-selected' : ''} ${group.recordings.length > 1 ? 'grouped-card' : ''}`}>
                 <div className="recording-header" onClick={() => batchMode ? toggleBatchRecording(rec.id) : toggleExpand(rec.id)}>
                   {batchMode && (
                     <div className="batch-checkbox" onClick={(e) => e.stopPropagation()}>
@@ -524,9 +539,11 @@ export function RecordingsPage() {
                   </div>
                   <div className="recording-info">
                     <div className="recording-title-row">
-                      <span className="meeting-id-tag" style={{ background: getMeetingColor(rec.meetingId) }} title={`Meeting ID: ${rec.meetingId}`}>
-                        {rec.meetingId}
-                      </span>
+                      {group.recordings.length <= 1 && (
+                        <span className="meeting-id-tag" style={{ background: getMeetingColor(rec.meetingId) }} title={`Meeting ID: ${rec.meetingId}`}>
+                          {rec.meetingId}
+                        </span>
+                      )}
                       <span className="recording-title" title={rec.meetingTopic}>{rec.meetingTopic}</span>
                     </div>
                     <div className="recording-meta">
@@ -680,6 +697,8 @@ export function RecordingsPage() {
                   </div>
                 )}
               </div>
+                ))}
+              </div>
             ))}
 
             {recordings.length === 0 && (
@@ -791,4 +810,38 @@ function getTodayDate(): string {
 
 function getDefaultFromDate(): string {
   return new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+}
+
+// Group recordings by meeting_id for recurring meetings
+interface MeetingGroup {
+  meetingId: string;
+  topic: string;
+  recordings: Recording[];
+  totalFiles: number;
+  totalSize: number;
+}
+
+function groupByMeetingId(recordings: Recording[]): MeetingGroup[] {
+  const groups = new Map<string, MeetingGroup>();
+  const order: string[] = [];
+
+  for (const rec of recordings) {
+    const key = rec.meetingId;
+    if (!groups.has(key)) {
+      groups.set(key, {
+        meetingId: key,
+        topic: rec.meetingTopic,
+        recordings: [],
+        totalFiles: 0,
+        totalSize: 0,
+      });
+      order.push(key);
+    }
+    const group = groups.get(key)!;
+    group.recordings.push(rec);
+    group.totalFiles += rec.recordingFiles.length;
+    group.totalSize += rec.totalSize;
+  }
+
+  return order.map((key) => groups.get(key)!);
 }

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { api } from '../api/client';
+import { api, isElectron } from '../api/client';
 import { useTranslation } from '../i18n';
 import type { DownloadTask } from '../../shared/types';
 
@@ -151,6 +151,20 @@ export function DownloadsPage() {
 
                 <div className="recording-badges">
                   <span className={`status-badge status-${status}`}>{status}</span>
+                  {status === 'completed' && isElectron && (api as any).system?.openFolder && (
+                    <button
+                      className="btn btn-sm"
+                      title={t('downloads.openFolder')}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        // Get folder from first task's destination path
+                        const folder = group.tasks[0]?.destinationPath?.replace(/[\\/][^\\/]+$/, '');
+                        if (folder) (api as any).system.openFolder(folder);
+                      }}
+                    >
+                      📂
+                    </button>
+                  )}
                 </div>
               </div>
 

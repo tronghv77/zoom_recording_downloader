@@ -1,4 +1,4 @@
-import { ipcMain, dialog, app, BrowserWindow } from 'electron';
+import { ipcMain, dialog, app, BrowserWindow, shell } from 'electron';
 import { getDatabase } from '../../src/database/connection';
 import { AccountRepository } from '../../src/database/repositories/AccountRepository';
 import { RecordingRepository } from '../../src/database/repositories/RecordingRepository';
@@ -134,4 +134,13 @@ export function registerIpcHandlers(): void {
   });
 
   ipcMain.handle('system:getAppVersion', () => app.getVersion());
+
+  ipcMain.handle('system:openFolder', async (_event: any, folderPath: string) => {
+    try {
+      await shell.openPath(folderPath);
+      return true;
+    } catch {
+      return false;
+    }
+  });
 }
