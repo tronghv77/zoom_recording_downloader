@@ -76,6 +76,10 @@ export class DownloadService implements IDownloadService {
     return this.downloadRepo.findAll();
   }
 
+  getSummary(): Record<string, any> {
+    return this.downloadRepo.getDownloadSummary();
+  }
+
   async getProgress(taskId: string): Promise<DownloadProgress | null> {
     const task = this.downloadRepo.findById(taskId);
     if (!task) return null;

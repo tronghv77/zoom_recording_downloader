@@ -45,6 +45,7 @@ const api = {
     cancel: (taskId: string) => invoke<void>('download:cancel', taskId),
     retry: (taskId: string) => invoke<void>('download:retry', taskId),
     getQueue: () => invoke<any[]>('download:getQueue'),
+    getSummary: () => invoke<Record<string, any>>('download:getSummary'),
     onProgress: (callback: (progress: any) => void) => {
       const listener = (_event: any, progress: any) => callback(progress);
       ipcRenderer.on('download:progress', listener);

@@ -109,6 +109,8 @@ export const translations = {
   'recordings.off': { vi: 'TẮT', en: 'OFF' },
   'recordings.runNow': { vi: 'Chạy Ngay', en: 'Run Now' },
   'recordings.deleteConfirm': { vi: 'Chuyển vào Thùng Rác Zoom?\n\nCó thể khôi phục trong 30 ngày.', en: 'Move to Zoom Trash?\n\nRecoverable within 30 days.' },
+  'recordings.openFolder': { vi: 'Mở Thư Mục', en: 'Open Folder' },
+  'recordings.pathCopied': { vi: 'Đã sao chép đường dẫn', en: 'Path copied to clipboard' },
 
   // === Downloads ===
   'downloads.title': { vi: 'Tải Về', en: 'Downloads' },

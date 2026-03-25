@@ -158,7 +158,7 @@ export class DownloadRepository {
     return this.mapObject(row);
   }
 
-  getDownloadSummary(): Record<string, { agentId: string | null; completedCount: number; totalCount: number; status: string }> {
+  getDownloadSummary(): Record<string, { agentId: string | null; completedCount: number; totalCount: number; status: string; folderPath: string | null }> {
     const result = this.db.exec(`
       SELECT recording_id,
              agent_id,
@@ -170,7 +170,8 @@ export class DownloadRepository {
                WHEN SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) > 0 THEN 'failed'
                WHEN SUM(CASE WHEN status = 'queued' THEN 1 ELSE 0 END) > 0 THEN 'queued'
                ELSE 'unknown'
-             END as group_status
+             END as group_status,
+             MIN(destination_path) as sample_path
       FROM download_tasks
       GROUP BY recording_id
     `);
@@ -178,11 +179,15 @@ export class DownloadRepository {
     if (result.length > 0) {
       for (const row of result[0].values) {
         const recId = row[0] as string;
+        const samplePath = row[5] as string | null;
+        // Extract folder from file path
+        const folderPath = samplePath ? samplePath.replace(/[/\\][^/\\]+$/, '') : null;
         summary[recId] = {
           agentId: row[1] as string | null,
           totalCount: row[2] as number,
           completedCount: row[3] as number,
           status: row[4] as string,
+          folderPath,
         };
       }
     }

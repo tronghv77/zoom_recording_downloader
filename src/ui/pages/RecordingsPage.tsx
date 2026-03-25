@@ -44,8 +44,8 @@ export function RecordingsPage() {
     const unsubs: Array<() => void> = [];
     unsubs.push(api.scheduler.onMessage(() => { loadScheduler(); }));
 
-    // Load download summary
-    if (isWeb && (api as any).download?.getSummary) {
+    // Load download summary (both Desktop and Web)
+    if ((api as any).download?.getSummary) {
       (api as any).download.getSummary().then(setDownloadSummary).catch(() => {});
     }
 
@@ -210,8 +210,16 @@ export function RecordingsPage() {
         setSyncResult(`Added ${fileIds.length} file(s) to download queue`);
       }
       setDownloadPickerId(null);
+      // Refresh download summary
+      refreshDownloadSummary();
     } catch (err: any) {
       setError(err.message || 'Failed to enqueue download');
+    }
+  }
+
+  function refreshDownloadSummary() {
+    if ((api as any).download?.getSummary) {
+      (api as any).download.getSummary().then(setDownloadSummary).catch(() => {});
     }
   }
 
@@ -266,6 +274,20 @@ export function RecordingsPage() {
       }
     } catch (err: any) {
       setError(err.message || 'Failed to batch download');
+    }
+  }
+
+  async function handleOpenFolder(folderPath: string) {
+    try {
+      if (!isWeb && (api as any).system?.openFolder) {
+        await (api as any).system.openFolder(folderPath);
+      } else {
+        // Web mode: copy path to clipboard
+        await navigator.clipboard.writeText(folderPath);
+        setSyncResult(`📋 ${t('recordings.pathCopied')}: ${folderPath}`);
+      }
+    } catch (err: any) {
+      setError(err.message || 'Failed to open folder');
     }
   }
 
@@ -559,7 +581,10 @@ export function RecordingsPage() {
                     <span className="file-count">{rec.recordingFiles.length} {t('recordings.files')}</span>
                     <span className={`status-badge status-${rec.status}`}>{rec.status}</span>
                     {downloadSummary[rec.id] && (
-                      <span className={`download-badge download-${downloadSummary[rec.id].status}`}>
+                      <span
+                        className={`download-badge download-${downloadSummary[rec.id].status}`}
+                        title={downloadSummary[rec.id].folderPath || ''}
+                      >
                         {downloadSummary[rec.id].status === 'completed' ? '✅' :
                          downloadSummary[rec.id].status === 'downloading' ? '⏬' :
                          downloadSummary[rec.id].status === 'failed' ? '❌' : '⏳'}
@@ -569,6 +594,15 @@ export function RecordingsPage() {
                           ? ` 📱 ${downloadSummary[rec.id].agentId.replace('agent-', '')}`
                           : ' 💻 Server'}
                       </span>
+                    )}
+                    {downloadSummary[rec.id]?.status === 'completed' && downloadSummary[rec.id]?.folderPath && (
+                      <button
+                        className="btn btn-sm btn-open-folder"
+                        onClick={(e) => { e.stopPropagation(); handleOpenFolder(downloadSummary[rec.id].folderPath); }}
+                        title={downloadSummary[rec.id].folderPath}
+                      >
+                        📂 {t('recordings.openFolder')}
+                      </button>
                     )}
                   </div>
                   <div className="recording-actions" onClick={(e) => e.stopPropagation()}>
