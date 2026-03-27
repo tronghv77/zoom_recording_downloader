@@ -6,7 +6,15 @@
       "Bash(node -e \":*)",
       "Bash(cmd.exe /c \"for /f \"\"tokens=5\"\" %a in \\(''netstat -aon ^| findstr :3000 ^| findstr LISTENING''\\) do taskkill /F /PID %a\")",
       "Bash(npx electron-builder:*)",
-      "Bash(CSC_IDENTITY_AUTO_DISCOVERY=false npx electron-builder --win portable --config.win.signAndEditExecutable=false)"
+      "Bash(CSC_IDENTITY_AUTO_DISCOVERY=false npx electron-builder --win portable --config.win.signAndEditExecutable=false)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" https://zoomrecordingdownloader-production.up.railway.app/)",
+      "Bash(curl -sv https://zoomrecordingdownloader-production.up.railway.app/api/auth/status)",
+      "Bash(gh run:*)",
+      "Bash(railway status:*)",
+      "Bash(curl -si https://zoomrecordingdownloader-production.up.railway.app/api/auth/status)",
+      "Bash(npm ls:*)",
+      "Bash(magick -size 256x256 xc:\"#6366f1\" -fill white -font Arial -pointsize 80 -gravity center -annotate +0-30 \"Z\" -fill white -font Arial -pointsize 30 -gravity center -annotate +0+40 \"DL\" -fill \"#4f46e5\" -draw \"roundrectangle 10,10 245,245 30,30\" -fill white -font Arial -pointsize 90 -gravity center -annotate +0-20 \"Z\" -fill \"#c7d2fe\" -font Arial -pointsize 35 -gravity center -annotate +0+45 \"DL\" icon.png)",
+      "Bash(where magick:*)"
     ]
   }
 }

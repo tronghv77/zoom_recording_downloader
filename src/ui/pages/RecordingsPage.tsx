@@ -16,9 +16,6 @@ export function RecordingsPage() {
   const [error, setError] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [syncAccountId, setSyncAccountId] = useState('');
-  const [renamingId, setRenamingId] = useState<string | null>(null);
-  const [renameValue, setRenameValue] = useState('');
-  const [renaming, setRenaming] = useState(false);
   const [downloadPickerId, setDownloadPickerId] = useState<string | null>(null);
   const [selectedFileIds, setSelectedFileIds] = useState<Set<string>>(new Set());
   const [scheduler, setScheduler] = useState<any>(null);
@@ -318,27 +315,6 @@ export function RecordingsPage() {
     }
   }
 
-  function startRename(rec: Recording) {
-    setRenamingId(rec.id);
-    setRenameValue(rec.meetingTopic);
-  }
-
-  async function handleRename() {
-    if (!renamingId || !renameValue.trim()) return;
-    try {
-      setRenaming(true);
-      setError(null);
-      await api.recording.rename(renamingId, renameValue.trim(), true);
-      setSyncResult('Renamed successfully');
-      setRenamingId(null);
-      loadRecordings();
-    } catch (err: any) {
-      setError(err.message || 'Rename failed');
-    } finally {
-      setRenaming(false);
-    }
-  }
-
   function getAccountName(accountId: string): string {
     return accounts.find((a) => a.id === accountId)?.name || 'Unknown';
   }
@@ -606,9 +582,6 @@ export function RecordingsPage() {
                     )}
                   </div>
                   <div className="recording-actions" onClick={(e) => e.stopPropagation()}>
-                    <button className="btn btn-sm" onClick={() => startRename(rec)}>
-                      Rename
-                    </button>
                     <button
                       className="btn btn-sm btn-primary"
                       onClick={() => openDownloadPicker(rec)}
@@ -626,24 +599,6 @@ export function RecordingsPage() {
                     )}
                   </div>
                 </div>
-
-                {renamingId === rec.id && (
-                  <div className="rename-form" onClick={(e) => e.stopPropagation()}>
-                    <input
-                      className="rename-input"
-                      value={renameValue}
-                      onChange={(e) => setRenameValue(e.target.value)}
-                      onKeyDown={(e) => e.key === 'Enter' && handleRename()}
-                      autoFocus
-                    />
-                    <div className="rename-actions">
-                      <button className="btn btn-sm btn-primary" onClick={handleRename} disabled={renaming}>
-                        {renaming ? 'Saving...' : 'Save'}
-                      </button>
-                      <button className="btn btn-sm" onClick={() => setRenamingId(null)}>Cancel</button>
-                    </div>
-                  </div>
-                )}
 
                 {expandedId === rec.id && (
                   <div className="recording-files">
