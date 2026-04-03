@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { api, isElectron } from '../api/client';
+import { api, isElectron, isWeb } from '../api/client';
 import { useTranslation } from '../i18n';
 import type { Language } from '../i18n';
 
@@ -34,11 +34,18 @@ export function SettingsPage() {
   const [schedulerLogs, setSchedulerLogs] = useState<string[]>([]);
   const [updateInfo, setUpdateInfo] = useState<{ hasUpdate: boolean; latestVersion: string; currentVersion: string; downloadUrl: string } | null>(null);
   const [checkingUpdate, setCheckingUpdate] = useState(false);
+  const [gdrive, setGdrive] = useState<{ authenticated: boolean; autoUpload: boolean; folderId: string; clientId: string; clientSecret: string } | null>(null);
+  const [gdriveClientId, setGdriveClientId] = useState('');
+  const [gdriveClientSecret, setGdriveClientSecret] = useState('');
+  const [gdriveFolderId, setGdriveFolderId] = useState('');
+  const [gdriveAutoUpload, setGdriveAutoUpload] = useState(false);
+  const [gdriveConnecting, setGdriveConnecting] = useState(false);
 
   useEffect(() => {
     loadSettings();
     loadScheduler();
-    checkForUpdate(); // Auto-check on page load
+    checkForUpdate();
+    loadGoogleDrive();
 
     const unsub = api.scheduler.onMessage((msg: string) => {
       setSchedulerLogs((prev) => [...prev.slice(-19), msg]);
@@ -104,6 +111,63 @@ export function SettingsPage() {
     } finally {
       setRunningNow(false);
       loadScheduler();
+    }
+  }
+
+  async function loadGoogleDrive() {
+    try {
+      const googleApi = (api as any).google;
+      if (!googleApi) return;
+      const [status, settings] = await Promise.all([
+        googleApi.getStatus(),
+        googleApi.getSettings(),
+      ]);
+      setGdrive({ ...status, ...settings });
+      setGdriveClientId(settings.clientId || '');
+      setGdriveClientSecret(settings.clientSecret || '');
+      setGdriveFolderId(settings.folderId || '');
+      setGdriveAutoUpload(settings.autoUpload || false);
+    } catch {}
+  }
+
+  async function handleGdriveConnect() {
+    const googleApi = (api as any).google;
+    if (!googleApi) return;
+    try {
+      setGdriveConnecting(true);
+      // Save credentials first
+      await googleApi.saveSettings({ clientId: gdriveClientId, clientSecret: gdriveClientSecret, folderId: gdriveFolderId, autoUpload: gdriveAutoUpload, enabled: true });
+      // Get auth URL and redirect
+      const result = await googleApi.getAuthUrl();
+      window.open(result.url, '_blank');
+    } catch (err: any) {
+      setError(err.message || 'Failed to connect Google Drive');
+    } finally {
+      setGdriveConnecting(false);
+    }
+  }
+
+  async function handleGdriveDisconnect() {
+    const googleApi = (api as any).google;
+    if (!googleApi) return;
+    try {
+      await googleApi.disconnect();
+      loadGoogleDrive();
+    } catch (err: any) {
+      setError(err.message);
+    }
+  }
+
+  async function handleGdriveSave() {
+    const googleApi = (api as any).google;
+    if (!googleApi) return;
+    try {
+      await googleApi.saveSettings({ clientId: gdriveClientId, clientSecret: gdriveClientSecret, folderId: gdriveFolderId, autoUpload: gdriveAutoUpload });
+      setSaved(true);
+      setTimeout(() => setSaved(false), 3000);
+      loadGoogleDrive();
+    } catch (err: any) {
+      setError(err.message);
     }
   }
 
@@ -350,6 +414,56 @@ export function SettingsPage() {
           </select>
         </div>
       </div>
+
+      {isWeb && (
+        <div className="settings-section">
+          <div className="section-header">
+            <h3>Google Drive</h3>
+            {gdrive?.authenticated ? (
+              <span className="status-badge status-completed">✅ {t('settings.gdConnected')}</span>
+            ) : (
+              <span className="status-badge status-queued">{t('settings.gdNotConnected')}</span>
+            )}
+          </div>
+
+          <div className="form-row">
+            <div className="form-group">
+              <label>Google Client ID</label>
+              <input value={gdriveClientId} onChange={(e) => setGdriveClientId(e.target.value)} placeholder="xxxxxxxx.apps.googleusercontent.com" />
+            </div>
+            <div className="form-group">
+              <label>Google Client Secret</label>
+              <input type="password" value={gdriveClientSecret} onChange={(e) => setGdriveClientSecret(e.target.value)} placeholder="GOCSPX-xxxxxxxx" />
+            </div>
+          </div>
+
+          <div className="form-row">
+            <div className="form-group">
+              <label>{t('settings.gdFolderId')}</label>
+              <input value={gdriveFolderId} onChange={(e) => setGdriveFolderId(e.target.value)} placeholder={t('settings.gdFolderIdHint')} />
+              <small>{t('settings.gdFolderIdDesc')}</small>
+            </div>
+            <div className="form-group">
+              <label>{t('settings.gdAutoUpload')}</label>
+              <select value={gdriveAutoUpload ? 'true' : 'false'} onChange={(e) => setGdriveAutoUpload(e.target.value === 'true')}>
+                <option value="false">{t('settings.gdAutoOff')}</option>
+                <option value="true">{t('settings.gdAutoOn')}</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="form-actions">
+            <button className="btn btn-primary" onClick={handleGdriveSave}>{t('settings.save')}</button>
+            {!gdrive?.authenticated ? (
+              <button className="btn btn-primary" onClick={handleGdriveConnect} disabled={gdriveConnecting || !gdriveClientId || !gdriveClientSecret}>
+                {gdriveConnecting ? '...' : t('settings.gdConnect')}
+              </button>
+            ) : (
+              <button className="btn btn-danger" onClick={handleGdriveDisconnect}>{t('settings.gdDisconnect')}</button>
+            )}
+          </div>
+        </div>
+      )}
 
       <div className="settings-section">
         <div className="section-header">

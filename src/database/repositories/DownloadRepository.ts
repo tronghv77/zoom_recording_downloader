@@ -130,6 +130,18 @@ export class DownloadRepository {
     saveDatabase();
   }
 
+  updateUploadStatus(id: string, status: string, driveFileId?: string): void {
+    if (driveFileId) {
+      this.db.run(
+        "UPDATE download_tasks SET upload_status = ?, google_drive_file_id = ?, uploaded_at = datetime('now') WHERE id = ?",
+        [status, driveFileId, id],
+      );
+    } else {
+      this.db.run('UPDATE download_tasks SET upload_status = ? WHERE id = ?', [status, id]);
+    }
+    saveDatabase();
+  }
+
   private mapObject(row: Record<string, any>): DownloadTask {
     return {
       id: row.id as string,

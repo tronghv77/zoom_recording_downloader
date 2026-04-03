@@ -128,9 +128,18 @@ export const httpApi = {
     save: (settings: any) => request<any>('PUT', '/settings', settings),
   },
 
+  google: {
+    getStatus: () => request<any>('GET', '/google/status'),
+    getSettings: () => request<any>('GET', '/google/settings'),
+    saveSettings: (settings: any) => request<any>('PUT', '/google/settings', settings),
+    getAuthUrl: (redirectUri?: string) => request<any>('GET', `/google/auth-url${redirectUri ? `?redirect_uri=${encodeURIComponent(redirectUri)}` : ''}`),
+    disconnect: () => request<void>('POST', '/google/disconnect'),
+    upload: (taskId: string) => request<any>('POST', `/google/upload/${taskId}`),
+    uploadAll: () => request<any>('POST', '/google/upload-all'),
+  },
+
   system: {
     selectDirectory: async () => {
-      // Web mode: server downloads files, so need server-side path
       const dir = prompt(
         'Enter download directory path on server:\n\n' +
         'Example: D:\\ZoomRecordings or /home/user/zoom',

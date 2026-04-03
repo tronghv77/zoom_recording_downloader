@@ -13,6 +13,7 @@ import { AccountService } from '../src/services/AccountService';
 import { RecordingService } from '../src/services/RecordingService';
 import { DownloadService } from '../src/services/DownloadService';
 import { SchedulerService } from '../src/services/SchedulerService';
+import { GoogleDriveService } from '../src/services/GoogleDriveService';
 import { createApiRouter } from './routes/api';
 import { setupWebSocket } from './ws';
 import { sessionMiddleware, requireAuth, createAuthRouter } from './auth';
@@ -44,7 +45,10 @@ async function main() {
     schedulerService.start(schedulerConfig);
   }
 
-  const services = { accountService, recordingService, downloadService, schedulerService, settingsRepo, downloadRepo };
+  // Google Drive service
+  const googleDriveService = new GoogleDriveService(settingsRepo, downloadRepo);
+
+  const services = { accountService, recordingService, downloadService, schedulerService, settingsRepo, downloadRepo, googleDriveService };
 
   // Create Express app
   const app = express();
@@ -82,7 +86,7 @@ async function main() {
 
   setupWebSocket(wss, services);
 
-  // Forward download progress via WebSocket
+  // Forward download progress via WebSocket + auto-upload
   downloadService.onProgress((progress) => {
     const message = JSON.stringify({ type: 'download:progress', data: progress });
     wss.clients.forEach((client) => {
@@ -90,6 +94,11 @@ async function main() {
         client.send(message);
       }
     });
+
+    // Auto-upload to Google Drive when completed
+    if (progress.status === 'completed') {
+      googleDriveService.onDownloadCompleted(progress.taskId).catch(() => {});
+    }
   });
 
   // Forward scheduler messages via WebSocket

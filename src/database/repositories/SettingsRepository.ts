@@ -4,10 +4,17 @@ import { saveDatabase } from '../connection';
 export interface AppSettings {
   defaultDownloadDir: string;
   maxConcurrentDownloads: number;
-  folderTemplate: string; // e.g. "{account}/{year}-{month}/{topic}"
+  folderTemplate: string;
   autoStartDownload: boolean;
   minimizeToTray: boolean;
-  theme: string; // 'dark' | 'light'
+  theme: string;
+  // Google Drive
+  googleDriveEnabled: string;
+  googleDriveAutoUpload: string;
+  googleDriveFolderId: string;
+  googleDriveTokens: string;
+  googleDriveClientId: string;
+  googleDriveClientSecret: string;
 }
 
 const DEFAULTS: AppSettings = {
@@ -17,6 +24,12 @@ const DEFAULTS: AppSettings = {
   autoStartDownload: true,
   minimizeToTray: false,
   theme: 'dark',
+  googleDriveEnabled: 'false',
+  googleDriveAutoUpload: 'false',
+  googleDriveFolderId: '',
+  googleDriveTokens: '',
+  googleDriveClientId: '',
+  googleDriveClientSecret: '',
 };
 
 export class SettingsRepository {
@@ -58,6 +71,12 @@ export class SettingsRepository {
       autoStartDownload: this.get('autoStartDownload') !== 'false',
       minimizeToTray: this.get('minimizeToTray') === 'true',
       theme: this.get('theme') || DEFAULTS.theme,
+      googleDriveEnabled: this.get('googleDriveEnabled') || DEFAULTS.googleDriveEnabled,
+      googleDriveAutoUpload: this.get('googleDriveAutoUpload') || DEFAULTS.googleDriveAutoUpload,
+      googleDriveFolderId: this.get('googleDriveFolderId') || DEFAULTS.googleDriveFolderId,
+      googleDriveTokens: this.get('googleDriveTokens') || DEFAULTS.googleDriveTokens,
+      googleDriveClientId: this.get('googleDriveClientId') || DEFAULTS.googleDriveClientId,
+      googleDriveClientSecret: this.get('googleDriveClientSecret') || DEFAULTS.googleDriveClientSecret,
     };
   }
 

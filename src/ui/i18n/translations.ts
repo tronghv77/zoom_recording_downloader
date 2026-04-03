@@ -155,6 +155,16 @@ export const translations = {
   'settings.latestVersion': { vi: 'Phiên bản mới nhất', en: 'Latest version' },
   'settings.downloadUpdate': { vi: 'Tải bản cập nhật', en: 'Download update' },
   'settings.updateError': { vi: 'Không thể kiểm tra cập nhật', en: 'Unable to check for updates' },
+  'settings.gdConnected': { vi: 'Đã kết nối', en: 'Connected' },
+  'settings.gdNotConnected': { vi: 'Chưa kết nối', en: 'Not connected' },
+  'settings.gdConnect': { vi: 'Kết Nối Google Drive', en: 'Connect Google Drive' },
+  'settings.gdDisconnect': { vi: 'Ngắt Kết Nối', en: 'Disconnect' },
+  'settings.gdFolderId': { vi: 'Google Drive Folder ID', en: 'Google Drive Folder ID' },
+  'settings.gdFolderIdHint': { vi: 'Để trống = tải vào root', en: 'Leave empty = upload to root' },
+  'settings.gdFolderIdDesc': { vi: 'Lấy từ URL thư mục Google Drive: drive.google.com/drive/folders/{ID}', en: 'Get from Google Drive folder URL: drive.google.com/drive/folders/{ID}' },
+  'settings.gdAutoUpload': { vi: 'Tự Động Upload', en: 'Auto Upload' },
+  'settings.gdAutoOn': { vi: 'Bật — upload ngay sau khi tải xong', en: 'On — upload after download completes' },
+  'settings.gdAutoOff': { vi: 'Tắt — upload thủ công', en: 'Off — manual upload only' },
 
   // === About ===
   'about.title': { vi: 'Giới Thiệu', en: 'About' },

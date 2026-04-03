@@ -5,6 +5,7 @@ import type { DownloadService } from '../../src/services/DownloadService';
 import type { SchedulerService } from '../../src/services/SchedulerService';
 import type { SettingsRepository } from '../../src/database/repositories/SettingsRepository';
 import type { DownloadRepository } from '../../src/database/repositories/DownloadRepository';
+import type { GoogleDriveService } from '../../src/services/GoogleDriveService';
 import { getAgentList, sendDownloadToAgent } from '../ws';
 
 interface Services {
@@ -14,6 +15,7 @@ interface Services {
   schedulerService: SchedulerService;
   settingsRepo: SettingsRepository;
   downloadRepo: DownloadRepository;
+  googleDriveService?: GoogleDriveService;
 }
 
 // Wrap async handler to catch errors
@@ -249,6 +251,58 @@ export function createApiRouter(services: Services): Router {
 
     res.json({ success: true, data: { sent: sentCount, total: recordingFileIds.length } });
   }));
+
+  // === Google Drive ===
+  if (services.googleDriveService) {
+    const gdrive = services.googleDriveService;
+
+    router.get('/google/status', wrap(async (_req, res) => {
+      res.json({ success: true, data: gdrive.getStatus() });
+    }));
+
+    router.get('/google/settings', wrap(async (_req, res) => {
+      res.json({ success: true, data: gdrive.getSettings() });
+    }));
+
+    router.put('/google/settings', wrap(async (req, res) => {
+      gdrive.saveSettings(req.body);
+      res.json({ success: true, data: null });
+    }));
+
+    router.get('/google/auth-url', wrap(async (req, res) => {
+      const redirectUri = req.query.redirect_uri as string ||
+        `${req.protocol}://${req.get('host')}/api/google/callback`;
+      const url = gdrive.getAuthUrl(redirectUri);
+      res.json({ success: true, data: { url } });
+    }));
+
+    router.get('/google/callback', async (req: any, res: any) => {
+      try {
+        const code = req.query.code as string;
+        const redirectUri = `${req.protocol}://${req.get('host')}/api/google/callback`;
+        await gdrive.handleCallback(code, redirectUri);
+        // Redirect back to settings page
+        res.redirect('/#/settings?google=connected');
+      } catch (err: any) {
+        res.redirect(`/#/settings?google=error&message=${encodeURIComponent(err.message)}`);
+      }
+    });
+
+    router.post('/google/disconnect', wrap(async (_req, res) => {
+      gdrive.disconnect();
+      res.json({ success: true, data: null });
+    }));
+
+    router.post('/google/upload/:taskId', wrap(async (req, res) => {
+      const result = await gdrive.uploadFile(req.params.taskId);
+      res.json({ success: true, data: result });
+    }));
+
+    router.post('/google/upload-all', wrap(async (_req, res) => {
+      const result = await gdrive.uploadAll();
+      res.json({ success: true, data: result });
+    }));
+  }
 
   return router;
 }
