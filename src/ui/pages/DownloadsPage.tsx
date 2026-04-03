@@ -64,6 +64,44 @@ export function DownloadsPage() {
   const totalActive = tasks.filter((t) => ['queued', 'downloading', 'paused'].includes(t.status)).length;
   const totalCompleted = tasks.filter((t) => t.status === 'completed').length;
   const totalFailed = tasks.filter((t) => t.status === 'failed').length;
+  const [gdriveConnected, setGdriveConnected] = useState(false);
+  const [uploading, setUploading] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    const googleApi = (api as any).google;
+    if (googleApi?.getStatus) {
+      googleApi.getStatus().then((s: any) => setGdriveConnected(s.authenticated)).catch(() => {});
+    }
+  }, []);
+
+  async function handleUploadFile(taskId: string) {
+    const googleApi = (api as any).google;
+    if (!googleApi) return;
+    try {
+      setUploading((prev) => new Set(prev).add(taskId));
+      await googleApi.upload(taskId);
+      loadQueue();
+    } catch (err: any) {
+      alert(`Upload failed: ${err.message}`);
+    } finally {
+      setUploading((prev) => { const next = new Set(prev); next.delete(taskId); return next; });
+    }
+  }
+
+  async function handleUploadAll() {
+    const googleApi = (api as any).google;
+    if (!googleApi) return;
+    try {
+      setUploading(new Set(['all']));
+      const result = await googleApi.uploadAll();
+      alert(`${t('downloads.uploadDone')}: ${result.uploaded} ${t('downloads.uploaded')}, ${result.failed} ${t('downloads.failed')}`);
+      loadQueue();
+    } catch (err: any) {
+      alert(`Upload failed: ${err.message}`);
+    } finally {
+      setUploading(new Set());
+    }
+  }
 
   async function handleClear() {
     if (!confirm(t('downloads.clearConfirm'))) return;
@@ -84,6 +122,15 @@ export function DownloadsPage() {
             <span className="download-summary">
               {totalActive} {t('downloads.active')} &middot; {totalCompleted} {t('downloads.completed')} &middot; {totalFailed} {t('downloads.failed')}
             </span>
+          )}
+          {gdriveConnected && totalCompleted > 0 && (
+            <button
+              className="btn btn-primary"
+              onClick={handleUploadAll}
+              disabled={uploading.size > 0}
+            >
+              {uploading.has('all') ? '⏳ Uploading...' : `☁️ ${t('downloads.uploadAll')}`}
+            </button>
           )}
           {tasks.length > 0 && (
             <button className="btn btn-danger" onClick={handleClear}>
@@ -229,6 +276,19 @@ export function DownloadsPage() {
                                 )}
                                 {['queued', 'downloading', 'paused'].includes(task.status) && (
                                   <button className="btn btn-sm btn-danger" onClick={(e) => { e.stopPropagation(); api.download.cancel(task.id); }}>{t('downloads.cancel')}</button>
+                                )}
+                                {task.status === 'completed' && gdriveConnected && (
+                                  task.uploadStatus === 'uploaded' ? (
+                                    <span className="status-badge status-completed" title={task.googleDriveFileId}>☁️ {t('downloads.uploaded')}</span>
+                                  ) : (
+                                    <button
+                                      className="btn btn-sm btn-primary"
+                                      onClick={(e) => { e.stopPropagation(); handleUploadFile(task.id); }}
+                                      disabled={uploading.has(task.id) || task.uploadStatus === 'uploading'}
+                                    >
+                                      {uploading.has(task.id) || task.uploadStatus === 'uploading' ? '⏳' : '☁️'} {t('downloads.uploadDrive')}
+                                    </button>
+                                  )
                                 )}
                               </td>
                             </tr>
