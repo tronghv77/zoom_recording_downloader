@@ -93,17 +93,32 @@ export function DownloadsPage() {
   const totalCompleted = tasks.filter((t) => t.status === 'completed').length;
   const totalFailed = tasks.filter((t) => t.status === 'failed').length;
 
+  async function handleClear() {
+    if (!confirm(t('downloads.clearConfirm'))) return;
+    try {
+      await (api as any).download.clear();
+      loadQueue();
+    } catch {}
+  }
+
   if (loading) return <div className="page"><div className="empty-state">{t('common.loading')}</div></div>;
 
   return (
     <div className="page">
       <div className="page-header">
         <h2>{t('downloads.title')}</h2>
-        {tasks.length > 0 && (
-          <span className="download-summary">
-            {totalActive} {t('downloads.active')} &middot; {totalCompleted} {t('downloads.completed')} &middot; {totalFailed} {t('downloads.failed')}
-          </span>
-        )}
+        <div className="header-actions">
+          {tasks.length > 0 && (
+            <span className="download-summary">
+              {totalActive} {t('downloads.active')} &middot; {totalCompleted} {t('downloads.completed')} &middot; {totalFailed} {t('downloads.failed')}
+            </span>
+          )}
+          {tasks.length > 0 && (
+            <button className="btn btn-danger" onClick={handleClear}>
+              {t('downloads.clearAll')}
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="download-list">

@@ -125,6 +125,8 @@ export const translations = {
   'downloads.done': { vi: 'Xong', en: 'Done' },
   'downloads.error': { vi: 'Lỗi', en: 'Error' },
   'downloads.openFolder': { vi: 'Mở thư mục tải về', en: 'Open download folder' },
+  'downloads.clearAll': { vi: 'Xóa Tất Cả', en: 'Clear All' },
+  'downloads.clearConfirm': { vi: 'Xóa toàn bộ lịch sử tải về? Hành động này không xóa file đã tải.', en: 'Clear all download history? This will not delete downloaded files.' },
   'downloads.fileType': { vi: 'Loại File', en: 'File Type' },
   'downloads.format': { vi: 'Định Dạng', en: 'Format' },
   'downloads.size': { vi: 'Kích Thước', en: 'Size' },

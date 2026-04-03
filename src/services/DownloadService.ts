@@ -80,6 +80,15 @@ export class DownloadService implements IDownloadService {
     return this.downloadRepo.getDownloadSummary();
   }
 
+  clearAll(status?: string): number {
+    // Cancel any active downloads first
+    for (const [taskId, controller] of this.activeDownloads) {
+      controller.abort();
+      this.activeDownloads.delete(taskId);
+    }
+    return this.downloadRepo.clearAll(status as any);
+  }
+
   async getProgress(taskId: string): Promise<DownloadProgress | null> {
     const task = this.downloadRepo.findById(taskId);
     if (!task) return null;

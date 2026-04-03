@@ -193,6 +193,22 @@ export class DownloadRepository {
     }
     return summary;
   }
+
+  clearAll(status?: DownloadTaskStatus): number {
+    let countSql = 'SELECT COUNT(*) FROM download_tasks';
+    let deleteSql = 'DELETE FROM download_tasks';
+    const params: any[] = [];
+    if (status) {
+      countSql += ' WHERE status = ?';
+      deleteSql += ' WHERE status = ?';
+      params.push(status);
+    }
+    const result = this.db.exec(countSql, params);
+    const count = result.length > 0 ? (result[0].values[0][0] as number) : 0;
+    this.db.run(deleteSql, params);
+    saveDatabase();
+    return count;
+  }
 }
 
 function sanitizeFileName(name: string): string {

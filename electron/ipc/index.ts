@@ -90,6 +90,7 @@ export function registerIpcHandlers(): void {
   safeHandle('download:retry', (taskId: string) => services.downloadService.retry(taskId));
   safeHandle('download:getQueue', () => services.downloadService.getQueue());
   safeHandle('download:getSummary', async () => services.downloadService.getSummary());
+  safeHandle('download:clear', async (status?: string) => services.downloadService.clearAll(status));
 
   // Forward download progress to renderer
   services.downloadService.onProgress((progress) => {

@@ -138,6 +138,12 @@ export function createApiRouter(services: Services): Router {
     res.json({ success: true, data: null });
   }));
 
+  router.delete('/downloads/clear', wrap(async (req, res) => {
+    const { status } = req.body || {};
+    const data = services.downloadService.clearAll(status);
+    res.json({ success: true, data });
+  }));
+
   // === Settings ===
   router.get('/settings', wrap(async (_req, res) => {
     const data = services.settingsRepo.getAll();
