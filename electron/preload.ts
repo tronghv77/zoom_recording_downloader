@@ -78,6 +78,7 @@ const api = {
     selectDirectory: () => ipcRenderer.invoke('system:selectDirectory'),
     getAppVersion: () => ipcRenderer.invoke('system:getAppVersion'),
     openFolder: (path: string) => ipcRenderer.invoke('system:openFolder', path),
+    openExternal: (url: string) => ipcRenderer.invoke('system:openExternal', url),
   },
 
   // Google Drive

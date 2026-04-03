@@ -139,7 +139,12 @@ export function SettingsPage() {
       await googleApi.saveSettings({ clientId: gdriveClientId, clientSecret: gdriveClientSecret, folderId: gdriveFolderId, autoUpload: gdriveAutoUpload, enabled: true });
       // Get auth URL and redirect
       const result = await googleApi.getAuthUrl();
-      window.open(result.url, '_blank');
+      // Desktop: open in default browser; Web: open new tab
+      if (isElectron && (api as any).system?.openExternal) {
+        await (api as any).system.openExternal(result.url);
+      } else {
+        window.open(result.url, '_blank');
+      }
     } catch (err: any) {
       setError(err.message || 'Failed to connect Google Drive');
     } finally {

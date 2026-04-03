@@ -140,6 +140,11 @@ export function registerIpcHandlers(): void {
 
   ipcMain.handle('system:getAppVersion', () => app.getVersion());
 
+  ipcMain.handle('system:openExternal', async (_event: any, url: string) => {
+    await shell.openExternal(url);
+    return true;
+  });
+
   ipcMain.handle('system:openFolder', async (_event: any, folderPath: string) => {
     try {
       await shell.openPath(folderPath);
