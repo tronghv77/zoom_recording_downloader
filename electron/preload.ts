@@ -91,6 +91,11 @@ const api = {
     disconnect: () => invoke<void>('google:disconnect'),
     upload: (taskId: string) => invoke<any>('google:upload', taskId),
     uploadAll: () => invoke<any>('google:uploadAll'),
+    onConnected: (callback: () => void) => {
+      const listener = () => callback();
+      ipcRenderer.on('google:connected', listener);
+      return () => ipcRenderer.removeListener('google:connected', listener);
+    },
   },
 };
 

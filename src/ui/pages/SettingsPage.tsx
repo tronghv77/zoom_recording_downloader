@@ -47,10 +47,24 @@ export function SettingsPage() {
     checkForUpdate();
     loadGoogleDrive();
 
-    const unsub = api.scheduler.onMessage((msg: string) => {
+    const unsubs: Array<() => void> = [];
+    unsubs.push(api.scheduler.onMessage((msg: string) => {
       setSchedulerLogs((prev) => [...prev.slice(-19), msg]);
-    });
-    return () => { unsub(); };
+    }));
+
+    // Listen for Google Drive connected event (Desktop)
+    const googleApi = (api as any).google;
+    if (googleApi?.onConnected) {
+      unsubs.push(googleApi.onConnected(() => { loadGoogleDrive(); }));
+    }
+
+    // Check URL params for Google Drive connection (Web)
+    const params = new URLSearchParams(window.location.hash.split('?')[1] || '');
+    if (params.get('google') === 'connected') {
+      loadGoogleDrive();
+    }
+
+    return () => { unsubs.forEach((u) => u()); };
   }, []);
 
   async function checkForUpdate() {

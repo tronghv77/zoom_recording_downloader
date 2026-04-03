@@ -157,6 +157,7 @@ export function registerIpcHandlers(): void {
   // === Google Drive handlers ===
   const gdrive = services.googleDriveService;
   const DESKTOP_REDIRECT_URI = 'http://127.0.0.1:17710/google/callback';
+  let oauthServer: any = null;
 
   safeHandle('google:getStatus', async () => gdrive.getStatus());
   safeHandle('google:getSettings', async () => gdrive.getSettings());
@@ -164,9 +165,15 @@ export function registerIpcHandlers(): void {
   safeHandle('google:getAuthUrl', async () => {
     const url = gdrive.getAuthUrl(DESKTOP_REDIRECT_URI);
 
+    // Close previous server if still running
+    if (oauthServer) {
+      try { oauthServer.close(); } catch {}
+      oauthServer = null;
+    }
+
     // Start temporary HTTP server to catch OAuth callback
     const http = require('http');
-    const tempServer = http.createServer(async (req: any, res: any) => {
+    oauthServer = http.createServer(async (req: any, res: any) => {
       const reqUrl = new URL(req.url, `http://127.0.0.1:17710`);
       if (reqUrl.pathname === '/google/callback') {
         const code = reqUrl.searchParams.get('code');
@@ -175,6 +182,11 @@ export function registerIpcHandlers(): void {
             await gdrive.handleCallback(code, DESKTOP_REDIRECT_URI);
             res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
             res.end('<h2>✅ Kết nối Google Drive thành công!</h2><p>Bạn có thể đóng tab này và quay lại ứng dụng.</p><script>setTimeout(()=>window.close(),2000)</script>');
+            // Notify renderer to refresh status
+            const windows = BrowserWindow.getAllWindows();
+            for (const win of windows) {
+              win.webContents.send('google:connected');
+            }
           } catch (err: any) {
             res.writeHead(500, { 'Content-Type': 'text/html; charset=utf-8' });
             res.end(`<h2>❌ Lỗi: ${err.message}</h2>`);
@@ -183,17 +195,21 @@ export function registerIpcHandlers(): void {
           res.writeHead(400, { 'Content-Type': 'text/html; charset=utf-8' });
           res.end('<h2>❌ Không nhận được mã xác thực</h2>');
         }
-        // Close server after handling
-        setTimeout(() => tempServer.close(), 1000);
+        setTimeout(() => { try { oauthServer.close(); oauthServer = null; } catch {} }, 1000);
       }
     });
 
-    tempServer.listen(17710, '127.0.0.1', () => {
+    oauthServer.listen(17710, '127.0.0.1', () => {
       console.log('[GoogleDrive] OAuth callback server listening on port 17710');
     });
 
-    // Auto-close after 5 minutes if no callback
-    setTimeout(() => { try { tempServer.close(); } catch {} }, 5 * 60 * 1000);
+    oauthServer.on('error', (err: any) => {
+      console.error('[GoogleDrive] Server error:', err.message);
+      oauthServer = null;
+    });
+
+    // Auto-close after 5 minutes
+    setTimeout(() => { if (oauthServer) { try { oauthServer.close(); } catch {} oauthServer = null; } }, 5 * 60 * 1000);
 
     return { url };
   });
