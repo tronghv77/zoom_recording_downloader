@@ -86,7 +86,11 @@ export class GoogleDriveService {
 
     try {
       const drive = this.createDriveClient();
-      const rootFolderId = this.settingsRepo.get('googleDriveFolderId') || 'root';
+      const configuredFolderId = this.settingsRepo.get('googleDriveFolderId') || '';
+      // Auto-create ZoomRecordings folder if no folder ID configured
+      const rootFolderId = configuredFolderId
+        ? this.extractFolderId(configuredFolderId)
+        : await this.ensureRootFolder(drive);
 
       // Build folder path on Drive from destination path
       const relativePath = this.getRelativePath(filePath);
@@ -152,6 +156,48 @@ export class GoogleDriveService {
   }
 
   // === Private helpers ===
+
+  private extractFolderId(input: string): string {
+    // Accept full URL or just ID
+    // https://drive.google.com/drive/u/0/folders/ABC123 → ABC123
+    const match = input.match(/folders\/([a-zA-Z0-9_-]+)/);
+    return match ? match[1] : input.trim();
+  }
+
+  private async ensureRootFolder(drive: drive_v3.Drive): Promise<string> {
+    const folderName = 'ZoomRecordings';
+    const cacheKey = `root/${folderName}`;
+
+    if (this.folderCache.has(cacheKey)) {
+      return this.folderCache.get(cacheKey)!;
+    }
+
+    // Search for existing folder
+    const res = await drive.files.list({
+      q: `name='${folderName}' and 'root' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false`,
+      fields: 'files(id)',
+      pageSize: 1,
+    });
+
+    let folderId: string;
+    if (res.data.files && res.data.files.length > 0) {
+      folderId = res.data.files[0].id!;
+      console.log(`[GoogleDrive] Found root folder: ${folderName} (${folderId})`);
+    } else {
+      const createRes = await drive.files.create({
+        requestBody: {
+          name: folderName,
+          mimeType: 'application/vnd.google-apps.folder',
+        },
+        fields: 'id',
+      });
+      folderId = createRes.data.id!;
+      console.log(`[GoogleDrive] Created root folder: ${folderName} (${folderId})`);
+    }
+
+    this.folderCache.set(cacheKey, folderId);
+    return folderId;
+  }
 
   private createOAuth2Client(redirectUri?: string) {
     const clientId = this.settingsRepo.get('googleDriveClientId') || process.env.GOOGLE_CLIENT_ID || '';
