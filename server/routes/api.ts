@@ -270,8 +270,9 @@ export function createApiRouter(services: Services): Router {
     }));
 
     router.get('/google/auth-url', wrap(async (req, res) => {
+      const proto = req.get('x-forwarded-proto') || req.protocol;
       const redirectUri = req.query.redirect_uri as string ||
-        `${req.protocol}://${req.get('host')}/api/google/callback`;
+        `${proto}://${req.get('host')}/api/google/callback`;
       const url = gdrive.getAuthUrl(redirectUri);
       res.json({ success: true, data: { url } });
     }));
@@ -279,7 +280,8 @@ export function createApiRouter(services: Services): Router {
     router.get('/google/callback', async (req: any, res: any) => {
       try {
         const code = req.query.code as string;
-        const redirectUri = `${req.protocol}://${req.get('host')}/api/google/callback`;
+        const proto = req.get('x-forwarded-proto') || req.protocol;
+        const redirectUri = `${proto}://${req.get('host')}/api/google/callback`;
         await gdrive.handleCallback(code, redirectUri);
         // Redirect back to settings page
         res.redirect('/#/settings?google=connected');
