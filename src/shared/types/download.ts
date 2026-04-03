@@ -8,7 +8,8 @@ export interface DownloadTask {
   fileSize: number;
   downloadUrl: string;
   destinationPath: string;
-  agentId?: string; // which agent/device handles the download (Phase 3)
+  meetingId?: string;
+  agentId?: string;
   status: DownloadTaskStatus;
   progress: number; // 0-100
   bytesDownloaded: number;
@@ -17,6 +18,9 @@ export interface DownloadTask {
   createdAt: string;
   startedAt?: string;
   completedAt?: string;
+  uploadStatus?: 'pending' | 'uploading' | 'uploaded' | 'failed' | null;
+  googleDriveFileId?: string;
+  uploadedAt?: string;
 }
 
 export type DownloadTaskStatus =

@@ -48,7 +48,7 @@ export class DownloadRepository {
 
     // Get recording file info with account name and start_time
     const stmt = this.db.prepare(
-      `SELECT rf.*, r.account_id, r.meeting_topic, r.start_time, r.id as rec_id, a.name as account_name
+      `SELECT rf.*, r.account_id, r.meeting_topic, r.meeting_id, r.start_time, r.id as rec_id, a.name as account_name
        FROM recording_files rf
        JOIN recordings r ON rf.recording_id = r.id
        LEFT JOIN accounts a ON r.account_id = a.id
@@ -78,13 +78,14 @@ export class DownloadRepository {
 
     this.db.run(
       `INSERT INTO download_tasks
-       (id, recording_file_id, recording_id, account_id, meeting_topic, file_type, file_size, download_url, destination_path, agent_id)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       (id, recording_file_id, recording_id, account_id, meeting_id, meeting_topic, file_type, file_size, download_url, destination_path, agent_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         id,
         recordingFileId,
         file.rec_id,
         file.account_id,
+        file.meeting_id || null,
         file.meeting_topic,
         file.file_type,
         file.file_size,
@@ -135,6 +136,7 @@ export class DownloadRepository {
       recordingFileId: row.recording_file_id as string,
       recordingId: row.recording_id as string,
       accountId: row.account_id as string,
+      meetingId: (row.meeting_id as string) || undefined,
       meetingTopic: row.meeting_topic as string,
       fileType: row.file_type as string,
       fileSize: row.file_size as number,
@@ -149,6 +151,9 @@ export class DownloadRepository {
       createdAt: row.created_at as string,
       startedAt: (row.started_at as string) || undefined,
       completedAt: (row.completed_at as string) || undefined,
+      uploadStatus: (row.upload_status as any) || null,
+      googleDriveFileId: (row.google_drive_file_id as string) || undefined,
+      uploadedAt: (row.uploaded_at as string) || undefined,
     };
   }
 

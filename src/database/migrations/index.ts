@@ -1,10 +1,12 @@
 import { Database as SqlJsDatabase } from 'sql.js';
 import { up as migration001 } from './001_initial';
 import { up as migration002 } from './002_recording_uuid';
+import { up as migration003 } from './003_download_enhancements';
 
 const migrations = [
   { version: 1, name: '001_initial', up: migration001 },
   { version: 2, name: '002_recording_uuid', up: migration002 },
+  { version: 3, name: '003_download_enhancements', up: migration003 },
 ];
 
 export function runMigrations(db: SqlJsDatabase): void {
