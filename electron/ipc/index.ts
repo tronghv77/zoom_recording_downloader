@@ -8,12 +8,14 @@ import { AccountService } from '../../src/services/AccountService';
 import { RecordingService } from '../../src/services/RecordingService';
 import { DownloadService } from '../../src/services/DownloadService';
 import { SchedulerService } from '../../src/services/SchedulerService';
+import { GoogleDriveService } from '../../src/services/GoogleDriveService';
 
 let accountService: AccountService;
 let recordingService: RecordingService;
 let downloadService: DownloadService;
 let settingsRepo: SettingsRepository;
 let schedulerService: SchedulerService;
+let googleDriveService: GoogleDriveService;
 
 function getServices() {
   if (!accountService) {
@@ -27,6 +29,7 @@ function getServices() {
     recordingService = new RecordingService(recordingRepo, accountService);
     downloadService = new DownloadService(downloadRepo, recordingRepo, accountService);
     schedulerService = new SchedulerService(recordingService, downloadService, accountService, settingsRepo, recordingRepo);
+    googleDriveService = new GoogleDriveService(settingsRepo, downloadRepo);
 
     // Auto-start scheduler if enabled
     const schedulerConfig = schedulerService.getConfig();
@@ -34,7 +37,7 @@ function getServices() {
       schedulerService.start(schedulerConfig);
     }
   }
-  return { accountService, recordingService, downloadService, settingsRepo, schedulerService };
+  return { accountService, recordingService, downloadService, settingsRepo, schedulerService, googleDriveService };
 }
 
 // Wrap handler to catch errors and return them as serializable objects
@@ -145,4 +148,21 @@ export function registerIpcHandlers(): void {
       return false;
     }
   });
+
+  // === Google Drive handlers ===
+  const gdrive = services.googleDriveService;
+  safeHandle('google:getStatus', async () => gdrive.getStatus());
+  safeHandle('google:getSettings', async () => gdrive.getSettings());
+  safeHandle('google:saveSettings', async (settings: any) => { gdrive.saveSettings(settings); return null; });
+  safeHandle('google:getAuthUrl', async () => {
+    const url = gdrive.getAuthUrl('http://127.0.0.1:17720');
+    return { url };
+  });
+  safeHandle('google:handleCallback', async (code: string) => {
+    await gdrive.handleCallback(code, 'http://127.0.0.1:17720');
+    return null;
+  });
+  safeHandle('google:disconnect', async () => { gdrive.disconnect(); return null; });
+  safeHandle('google:upload', async (taskId: string) => gdrive.uploadFile(taskId));
+  safeHandle('google:uploadAll', async () => gdrive.uploadAll());
 }

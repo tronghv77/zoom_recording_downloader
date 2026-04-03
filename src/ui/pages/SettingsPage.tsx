@@ -415,8 +415,7 @@ export function SettingsPage() {
         </div>
       </div>
 
-      {isWeb && (
-        <div className="settings-section">
+      <div className="settings-section">
           <div className="section-header">
             <h3>Google Drive</h3>
             {gdrive?.authenticated ? (
@@ -463,7 +462,6 @@ export function SettingsPage() {
             )}
           </div>
         </div>
-      )}
 
       <div className="settings-section">
         <div className="section-header">
@@ -506,7 +504,7 @@ export function SettingsPage() {
 
         <div className="about-app">
           <div className="about-app-name">Zoom Recording Downloader</div>
-          <div className="about-app-version">v1.0.0</div>
+          <div className="about-app-version">v1.1.0</div>
           <p className="about-app-desc">{t('about.description')}</p>
         </div>
 

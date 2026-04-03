@@ -79,6 +79,18 @@ const api = {
     getAppVersion: () => ipcRenderer.invoke('system:getAppVersion'),
     openFolder: (path: string) => ipcRenderer.invoke('system:openFolder', path),
   },
+
+  // Google Drive
+  google: {
+    getStatus: () => invoke<any>('google:getStatus'),
+    getSettings: () => invoke<any>('google:getSettings'),
+    saveSettings: (settings: any) => invoke<any>('google:saveSettings', settings),
+    getAuthUrl: () => invoke<any>('google:getAuthUrl'),
+    handleCallback: (code: string) => invoke<any>('google:handleCallback', code),
+    disconnect: () => invoke<void>('google:disconnect'),
+    upload: (taskId: string) => invoke<any>('google:upload', taskId),
+    uploadAll: () => invoke<any>('google:uploadAll'),
+  },
 };
 
 contextBridge.exposeInMainWorld('api', api);
