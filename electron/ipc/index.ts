@@ -151,15 +151,49 @@ export function registerIpcHandlers(): void {
 
   // === Google Drive handlers ===
   const gdrive = services.googleDriveService;
+  const DESKTOP_REDIRECT_URI = 'http://127.0.0.1:17710/google/callback';
+
   safeHandle('google:getStatus', async () => gdrive.getStatus());
   safeHandle('google:getSettings', async () => gdrive.getSettings());
   safeHandle('google:saveSettings', async (settings: any) => { gdrive.saveSettings(settings); return null; });
   safeHandle('google:getAuthUrl', async () => {
-    const url = gdrive.getAuthUrl('http://127.0.0.1:17720');
+    const url = gdrive.getAuthUrl(DESKTOP_REDIRECT_URI);
+
+    // Start temporary HTTP server to catch OAuth callback
+    const http = require('http');
+    const tempServer = http.createServer(async (req: any, res: any) => {
+      const reqUrl = new URL(req.url, `http://127.0.0.1:17710`);
+      if (reqUrl.pathname === '/google/callback') {
+        const code = reqUrl.searchParams.get('code');
+        if (code) {
+          try {
+            await gdrive.handleCallback(code, DESKTOP_REDIRECT_URI);
+            res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+            res.end('<h2>✅ Kết nối Google Drive thành công!</h2><p>Bạn có thể đóng tab này và quay lại ứng dụng.</p><script>setTimeout(()=>window.close(),2000)</script>');
+          } catch (err: any) {
+            res.writeHead(500, { 'Content-Type': 'text/html; charset=utf-8' });
+            res.end(`<h2>❌ Lỗi: ${err.message}</h2>`);
+          }
+        } else {
+          res.writeHead(400, { 'Content-Type': 'text/html; charset=utf-8' });
+          res.end('<h2>❌ Không nhận được mã xác thực</h2>');
+        }
+        // Close server after handling
+        setTimeout(() => tempServer.close(), 1000);
+      }
+    });
+
+    tempServer.listen(17710, '127.0.0.1', () => {
+      console.log('[GoogleDrive] OAuth callback server listening on port 17710');
+    });
+
+    // Auto-close after 5 minutes if no callback
+    setTimeout(() => { try { tempServer.close(); } catch {} }, 5 * 60 * 1000);
+
     return { url };
   });
   safeHandle('google:handleCallback', async (code: string) => {
-    await gdrive.handleCallback(code, 'http://127.0.0.1:17720');
+    await gdrive.handleCallback(code, DESKTOP_REDIRECT_URI);
     return null;
   });
   safeHandle('google:disconnect', async () => { gdrive.disconnect(); return null; });
