@@ -1,12 +1,14 @@
 import { IRecordingService, SyncResult } from '../shared/interfaces';
-import { Recording, RecordingFilter, RecordingListResult } from '../shared/types';
+import { Recording, RecordingFilter, RecordingListResult, RenameRule } from '../shared/types';
 import { RecordingRepository } from '../database/repositories/RecordingRepository';
+import { RenameRuleRepository, normalizeMeetingId } from '../database/repositories/RenameRuleRepository';
 import { AccountService } from './AccountService';
 
 export class RecordingService implements IRecordingService {
   constructor(
     private recordingRepo: RecordingRepository,
     private accountService: AccountService,
+    private renameRuleRepo?: RenameRuleRepository,
   ) {}
 
   async list(filter: RecordingFilter): Promise<RecordingListResult> {
@@ -55,6 +57,12 @@ export class RecordingService implements IRecordingService {
 
     logs.push(`Done: ${newCount} new / ${totalFromApi} total from API`);
 
+    // Auto-apply rename rules to newly synced recordings
+    if (newCount > 0) {
+      const renamed = this.applyRenameRules();
+      if (renamed > 0) logs.push(`Auto-renamed ${renamed} recording(s) by rules`);
+    }
+
     return { accountName: account.name, newCount, totalFromApi, logs };
   }
 
@@ -77,21 +85,87 @@ export class RecordingService implements IRecordingService {
     return results;
   }
 
-  async rename(id: string, newTopic: string, updateCloud: boolean): Promise<void> {
+  // Local-only rename. Stores a custom_name that survives re-sync and is never
+  // pushed to Zoom Cloud. updateCloud kept for API compatibility (ignored).
+  async rename(id: string, newTopic: string, _updateCloud?: boolean): Promise<void> {
     const recording = await this.getById(id);
     if (!recording) throw new Error(`Recording not found: ${id}`);
+    this.recordingRepo.updateCustomName(id, newTopic);
+  }
 
-    // Update local DB
-    this.recordingRepo.updateTopic(id, newTopic);
+  // Clear the local custom name → revert to the original Zoom topic.
+  async clearCustomName(id: string): Promise<void> {
+    this.recordingRepo.updateCustomName(id, null);
+  }
 
-    // Optionally update on Zoom Cloud
-    if (updateCloud) {
-      const account = await this.accountService.getById(recording.accountId);
-      if (!account) throw new Error(`Account not found: ${recording.accountId}`);
+  // === Auto-rename rules ===
 
-      const client = this.accountService.createApiClient(account);
-      await client.updateMeetingTopic(recording.meetingId, newTopic);
+  async listRules(): Promise<RenameRule[]> {
+    if (!this.renameRuleRepo) return [];
+    return this.renameRuleRepo.findAll();
+  }
+
+  async createRule(input: Omit<RenameRule, 'id' | 'createdAt'>): Promise<RenameRule> {
+    if (!this.renameRuleRepo) throw new Error('Rename rules not available');
+    return this.renameRuleRepo.create(input);
+  }
+
+  async updateRule(id: string, input: Partial<Omit<RenameRule, 'id' | 'createdAt'>>): Promise<RenameRule> {
+    if (!this.renameRuleRepo) throw new Error('Rename rules not available');
+    return this.renameRuleRepo.update(id, input);
+  }
+
+  async deleteRule(id: string): Promise<void> {
+    if (!this.renameRuleRepo) throw new Error('Rename rules not available');
+    this.renameRuleRepo.delete(id);
+  }
+
+  // Apply all enabled rules to every recording. Returns number of recordings changed.
+  applyRenameRules(): number {
+    if (!this.renameRuleRepo) return 0;
+    const rules = this.renameRuleRepo.findAll().filter((r) => r.enabled);
+    if (rules.length === 0) return 0;
+
+    const recordings = this.recordingRepo.findAllBasic();
+    let changed = 0;
+    for (const rec of recordings) {
+      const rule = matchRule(rules, rec.meetingId, rec.startTime);
+      if (!rule) continue;
+      let touched = false;
+      if (rule.targetName && rule.targetName !== rec.customName) {
+        this.recordingRepo.updateCustomName(rec.id, rule.targetName);
+        touched = true;
+      }
+      const newColor = rule.color || null;
+      if (newColor && newColor !== rec.customColor) {
+        this.recordingRepo.updateCustomColor(rec.id, newColor);
+        touched = true;
+      }
+      if (touched) changed++;
     }
+    return changed;
+  }
+
+  // === Multi-delete ===
+
+  // Remove recordings from the LOCAL list only (does not touch Zoom Cloud).
+  async deleteLocalMany(ids: string[]): Promise<number> {
+    return this.recordingRepo.deleteMany(ids);
+  }
+
+  // Move multiple recordings to Zoom Trash (cloud). Returns per-id results.
+  async deleteCloudMany(ids: string[], permanent = false): Promise<{ ok: string[]; failed: { id: string; error: string }[] }> {
+    const ok: string[] = [];
+    const failed: { id: string; error: string }[] = [];
+    for (const id of ids) {
+      try {
+        await this.deleteFromCloud(id, permanent);
+        ok.push(id);
+      } catch (err: unknown) {
+        failed.push({ id, error: err instanceof Error ? err.message : 'Unknown error' });
+      }
+    }
+    return { ok, failed };
   }
 
   async clearAll(accountId?: string): Promise<number> {
@@ -116,4 +190,32 @@ export class RecordingService implements IRecordingService {
 
     this.recordingRepo.updateStatus(id, 'deleted');
   }
+}
+
+// Find the target name from the first matching rule (rules are pre-sorted by priority).
+// Matches when meeting IDs are equal (ignoring spaces) and the recording's LOCAL
+// start time (HH:MM) falls within [startFrom, startTo] inclusive.
+function matchRule(rules: RenameRule[], meetingId: string, startTime: string): RenameRule | null {
+  const recId = normalizeMeetingId(meetingId);
+  const d = new Date(startTime);
+  if (isNaN(d.getTime())) return null;
+  const recMinutes = d.getHours() * 60 + d.getMinutes();
+
+  for (const rule of rules) {
+    if (normalizeMeetingId(rule.meetingId) !== recId) continue;
+    const from = hhmmToMinutes(rule.startFrom);
+    const to = hhmmToMinutes(rule.startTo);
+    if (from === null || to === null) continue;
+    if (recMinutes >= from && recMinutes <= to) return rule;
+  }
+  return null;
+}
+
+function hhmmToMinutes(hhmm: string): number | null {
+  const m = /^(\d{1,2}):(\d{2})$/.exec(String(hhmm).trim());
+  if (!m) return null;
+  const h = Number(m[1]);
+  const min = Number(m[2]);
+  if (h > 23 || min > 59) return null;
+  return h * 60 + min;
 }

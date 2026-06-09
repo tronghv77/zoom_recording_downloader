@@ -4,7 +4,6 @@ import { Layout } from './components/Layout';
 import { DashboardPage } from './pages/DashboardPage';
 import { AccountsPage } from './pages/AccountsPage';
 import { RecordingsPage } from './pages/RecordingsPage';
-import { DownloadsPage } from './pages/DownloadsPage';
 import { SettingsPage } from './pages/SettingsPage';
 import { GuidePage } from './pages/GuidePage';
 import { LoginPage } from './pages/LoginPage';
@@ -54,7 +53,7 @@ export function App() {
       headers: { 'User-Agent': 'ZoomDL' },
     }).then(r => r.json()).then(data => {
       const latest = (data.tag_name || '').replace(/^v/, '');
-      const current = '1.0.0';
+      const current = '1.2.0';
       const [lM, lm = 0, lp = 0] = latest.split('.').map(Number);
       const [cM, cm = 0, cp = 0] = current.split('.').map(Number);
       if (lM > cM || (lM === cM && lm > cm) || (lM === cM && lm === cm && lp > cp)) {
@@ -96,7 +95,7 @@ export function App() {
             <Route path="/dashboard" element={<DashboardPage />} />
             <Route path="/accounts" element={<AccountsPage />} />
             <Route path="/recordings" element={<RecordingsPage />} />
-            <Route path="/downloads" element={<DownloadsPage />} />
+            <Route path="/downloads" element={<Navigate to="/recordings" replace />} />
             <Route path="/settings" element={<SettingsPage />} />
             <Route path="/guide" element={<GuidePage />} />
           </Routes>

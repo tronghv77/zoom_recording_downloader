@@ -48,7 +48,7 @@ export class DownloadRepository {
 
     // Get recording file info with account name and start_time
     const stmt = this.db.prepare(
-      `SELECT rf.*, r.account_id, r.meeting_topic, r.meeting_id, r.start_time, r.id as rec_id, a.name as account_name
+      `SELECT rf.*, r.account_id, r.meeting_topic, r.custom_name, r.meeting_id, r.start_time, r.id as rec_id, a.name as account_name
        FROM recording_files rf
        JOIN recordings r ON rf.recording_id = r.id
        LEFT JOIN accounts a ON r.account_id = a.id
@@ -62,12 +62,15 @@ export class DownloadRepository {
     const safeType = sanitizeFileName(String(file.file_type || 'video'));
     const ext = String(file.file_extension || 'mp4');
 
+    // Effective name: local custom name takes precedence over original Zoom topic
+    const effectiveName = String(file.custom_name || file.meeting_topic || 'Untitled');
+
     // Build folder path from template
     const template = folderTemplate || '{topic}';
     const vn = toVNTime(String(file.start_time || new Date().toISOString()));
     const folderPath = template
       .replace('{account}', sanitizeFileName(String(file.account_name || 'Unknown')))
-      .replace('{topic}', sanitizeFileName(String(file.meeting_topic || 'Untitled')))
+      .replace('{topic}', sanitizeFileName(effectiveName))
       .replace('{year}', vn.year)
       .replace('{month}', vn.month)
       .replace('{date}', vn.date)
@@ -86,7 +89,7 @@ export class DownloadRepository {
         file.rec_id,
         file.account_id,
         file.meeting_id || null,
-        file.meeting_topic,
+        effectiveName,
         file.file_type,
         file.file_size,
         file.download_url,

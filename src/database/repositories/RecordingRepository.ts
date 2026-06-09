@@ -180,6 +180,44 @@ export class RecordingRepository {
     saveDatabase();
   }
 
+  // Local-only custom name. Pass null/empty to clear (fall back to original topic).
+  updateCustomName(id: string, customName: string | null): void {
+    const value = customName && customName.trim() ? customName.trim() : null;
+    this.db.run('UPDATE recordings SET custom_name = ? WHERE id = ?', [value, id]);
+    saveDatabase();
+  }
+
+  // Local-only accent color (hex). Pass null/empty to clear.
+  updateCustomColor(id: string, color: string | null): void {
+    const value = color && color.trim() ? color.trim() : null;
+    this.db.run('UPDATE recordings SET custom_color = ? WHERE id = ?', [value, id]);
+    saveDatabase();
+  }
+
+  // Lightweight list of all recordings for the auto-rename rule engine.
+  findAllBasic(): Array<{ id: string; meetingId: string; startTime: string; customName: string | null; customColor: string | null }> {
+    const result = this.db.exec('SELECT id, meeting_id, start_time, custom_name, custom_color FROM recordings');
+    if (result.length === 0) return [];
+    return result[0].values.map((v) => ({
+      id: v[0] as string,
+      meetingId: v[1] as string,
+      startTime: v[2] as string,
+      customName: (v[3] as string) || null,
+      customColor: (v[4] as string) || null,
+    }));
+  }
+
+  // Delete recordings from the LOCAL database only (does not touch Zoom Cloud).
+  deleteMany(ids: string[]): number {
+    if (ids.length === 0) return 0;
+    const placeholders = ids.map(() => '?').join(',');
+    this.db.run(`DELETE FROM download_tasks WHERE recording_id IN (${placeholders})`, ids);
+    this.db.run(`DELETE FROM recording_files WHERE recording_id IN (${placeholders})`, ids);
+    this.db.run(`DELETE FROM recordings WHERE id IN (${placeholders})`, ids);
+    saveDatabase();
+    return ids.length;
+  }
+
   clearAll(accountId?: string): number {
     let count = 0;
     if (accountId) {
@@ -231,6 +269,8 @@ export class RecordingRepository {
       meetingId: row.meeting_id as string,
       uuid: (row.uuid as string) || (row.meeting_id as string),
       meetingTopic: row.meeting_topic as string,
+      customName: (row.custom_name as string) || undefined,
+      customColor: (row.custom_color as string) || undefined,
       hostEmail: row.host_email as string,
       startTime: row.start_time as string,
       duration: row.duration as number,

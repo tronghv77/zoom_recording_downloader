@@ -4,12 +4,28 @@ export interface Recording {
   meetingId: string;
   uuid: string;
   meetingTopic: string;
+  customName?: string; // local-only display name; not synced to Zoom Cloud
+  customColor?: string; // local-only accent color (hex), set by a rename rule
   hostEmail: string;
   startTime: string;
   duration: number; // minutes
   totalSize: number; // bytes
   recordingFiles: RecordingFile[];
   status: RecordingStatus;
+}
+
+// Auto-rename rule: when a recording's meetingId matches and its local start
+// time falls within [startFrom, startTo] (HH:MM), set customName = targetName.
+export interface RenameRule {
+  id: string;
+  meetingId: string;
+  startFrom: string; // 'HH:MM'
+  startTo: string; // 'HH:MM'
+  targetName: string;
+  color?: string; // optional accent color (hex) applied to matching recordings
+  priority: number;
+  enabled: boolean;
+  createdAt?: string;
 }
 
 export interface RecordingFile {

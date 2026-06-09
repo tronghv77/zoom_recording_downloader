@@ -1,7 +1,12 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { api, isWeb } from '../api/client';
 import { useTranslation } from '../i18n';
-import type { Recording, RecordingFile, ZoomAccount } from '../../shared/types';
+import type { Recording, RecordingFile, ZoomAccount, DownloadTask, RenameRule } from '../../shared/types';
+
+// Effective display name: local custom name overrides the original Zoom topic.
+function effectiveName(rec: { customName?: string; meetingTopic: string }): string {
+  return (rec.customName && rec.customName.trim()) ? rec.customName : rec.meetingTopic;
+}
 
 export function RecordingsPage() {
   const { t } = useTranslation();
@@ -26,6 +31,24 @@ export function RecordingsPage() {
   const [selectedRecordings, setSelectedRecordings] = useState<Set<string>>(new Set());
   const [downloadSummary, setDownloadSummary] = useState<Record<string, any>>({});
 
+  // Merged Downloads state
+  const [downloadTasks, setDownloadTasks] = useState<DownloadTask[]>([]);
+  const [gdriveConnected, setGdriveConnected] = useState(false);
+  const [uploading, setUploading] = useState<Set<string>>(new Set());
+
+  // Rename modal
+  const [renameTarget, setRenameTarget] = useState<Recording | null>(null);
+  const [renameValue, setRenameValue] = useState('');
+  const [renameSaving, setRenameSaving] = useState(false);
+
+  // Delete-scope dialog
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+
+  // Rules modal
+  const [rulesOpen, setRulesOpen] = useState(false);
+  const [applyingRules, setApplyingRules] = useState(false);
+
   const [filter, setFilter] = useState({
     accountId: '',
     search: '',
@@ -37,14 +60,32 @@ export function RecordingsPage() {
     api.account.list().then(setAccounts).catch(() => {});
     loadRecordings();
     loadScheduler();
+    loadDownloadTasks();
 
     const unsubs: Array<() => void> = [];
     unsubs.push(api.scheduler.onMessage(() => { loadScheduler(); }));
 
-    // Load download summary (both Desktop and Web)
-    if ((api as any).download?.getSummary) {
-      (api as any).download.getSummary().then(setDownloadSummary).catch(() => {});
+    // Live download progress → update inline task state
+    unsubs.push(api.download.onProgress((progress: any) => {
+      setDownloadTasks((prev) =>
+        prev.map((task) =>
+          task.id === progress.taskId
+            ? { ...task, progress: progress.progress, bytesDownloaded: progress.bytesDownloaded, speed: progress.speed, status: progress.status }
+            : task,
+        ),
+      );
+      if (progress.status !== 'downloading') {
+        setTimeout(() => { loadDownloadTasks(); refreshDownloadSummary(); }, 300);
+      }
+    }));
+
+    // Google Drive status
+    const googleApi = (api as any).google;
+    if (googleApi?.getStatus) {
+      googleApi.getStatus().then((s: any) => setGdriveConnected(s.authenticated)).catch(() => {});
     }
+
+    refreshDownloadSummary();
 
     // Load agents in web mode
     if (isWeb && (api as any).agents) {
@@ -54,6 +95,13 @@ export function RecordingsPage() {
 
     return () => { unsubs.forEach((u) => u()); };
   }, []);
+
+  async function loadDownloadTasks() {
+    try {
+      const queue = await api.download.getQueue();
+      setDownloadTasks(queue);
+    } catch {}
+  }
 
   async function loadScheduler() {
     try {
@@ -67,22 +115,19 @@ export function RecordingsPage() {
 
   async function toggleAutoSync() {
     if (!scheduler) return;
-    const newConfig = { ...scheduler, enabled: !scheduler.enabled };
-    await api.scheduler.saveConfig(newConfig);
+    await api.scheduler.saveConfig({ ...scheduler, enabled: !scheduler.enabled });
     loadScheduler();
   }
 
   async function toggleAutoDownload() {
     if (!scheduler) return;
-    const newConfig = { ...scheduler, autoDownload: !scheduler.autoDownload };
-    await api.scheduler.saveConfig(newConfig);
+    await api.scheduler.saveConfig({ ...scheduler, autoDownload: !scheduler.autoDownload });
     loadScheduler();
   }
 
   async function changeInterval(minutes: number) {
     if (!scheduler) return;
-    const newConfig = { ...scheduler, intervalMinutes: minutes };
-    await api.scheduler.saveConfig(newConfig);
+    await api.scheduler.saveConfig({ ...scheduler, intervalMinutes: minutes });
     loadScheduler();
   }
 
@@ -91,7 +136,7 @@ export function RecordingsPage() {
       setSchedulerBusy(true);
       const logs = await api.scheduler.runNow();
       setSyncLogs(logs);
-      setSyncResult(`Scheduler completed`);
+      setSyncResult('Scheduler completed');
       loadRecordings(1);
     } catch (err: any) {
       setError(err.message);
@@ -101,7 +146,9 @@ export function RecordingsPage() {
     }
   }
 
-  async function loadRecordings(p = page, filterOverride?: Partial<typeof filter>) {
+  // Fetch ALL recordings for the current filter, then group + paginate by group
+  // on the client. Grouping per-page would split one class across pages.
+  async function loadRecordings(_p = 1, filterOverride?: Partial<typeof filter>) {
     const f = { ...filter, ...filterOverride };
     try {
       setLoading(true);
@@ -111,12 +158,12 @@ export function RecordingsPage() {
         search: f.search || undefined,
         from: f.from || undefined,
         to: f.to || undefined,
-        page: p,
-        pageSize: 20,
+        page: 1,
+        pageSize: 5000,
       });
       setRecordings(result.recordings);
       setTotalCount(result.totalCount);
-      setPage(p);
+      setPage(1);
     } catch (err: any) {
       setError(err.message || 'Failed to load recordings');
     } finally {
@@ -195,19 +242,17 @@ export function RecordingsPage() {
     if (fileIds.length === 0) return;
     try {
       if (selectedAgent !== 'server' && isWeb && (api as any).agents) {
-        // Download to remote agent
         const result = await (api as any).agents.downloadToAgent(selectedAgent, fileIds);
         const agentName = agents.find((a) => a.id === selectedAgent)?.deviceName || selectedAgent;
         setSyncResult(`Sent ${result.sent} file(s) to "${agentName}"`);
       } else {
-        // Download to server (local)
         const dir = await getDownloadDir();
         if (!dir) return;
         await api.download.enqueue(fileIds, { destinationDir: dir });
         setSyncResult(`Added ${fileIds.length} file(s) to download queue`);
       }
       setDownloadPickerId(null);
-      // Refresh download summary
+      loadDownloadTasks();
       refreshDownloadSummary();
     } catch (err: any) {
       setError(err.message || 'Failed to enqueue download');
@@ -226,6 +271,8 @@ export function RecordingsPage() {
       if (!dir) return;
       await api.download.enqueue([file.id], { destinationDir: dir });
       setSyncResult(`Added 1 file to download queue`);
+      loadDownloadTasks();
+      refreshDownloadSummary();
     } catch (err: any) {
       setError(err.message || 'Failed to enqueue download');
     }
@@ -265,12 +312,119 @@ export function RecordingsPage() {
       }
       setBatchMode(false);
       setSelectedRecordings(new Set());
-      // Refresh download summary
-      if (isWeb && (api as any).download?.getSummary) {
-        (api as any).download.getSummary().then(setDownloadSummary).catch(() => {});
-      }
+      loadDownloadTasks();
+      refreshDownloadSummary();
     } catch (err: any) {
       setError(err.message || 'Failed to batch download');
+    }
+  }
+
+  // === Multi-delete ===
+  async function handleDeleteLocal() {
+    const ids = [...selectedRecordings];
+    if (ids.length === 0) return;
+    if (!confirm(t('delete.confirmLocal', { n: ids.length }))) return;
+    try {
+      setDeleting(true);
+      await api.recording.deleteLocalMany(ids);
+      setSyncResult(t('delete.doneLocal', { n: ids.length }));
+      closeDeleteDialog();
+      loadRecordings(1);
+    } catch (err: any) {
+      setError(err.message || 'Failed to delete');
+    } finally {
+      setDeleting(false);
+    }
+  }
+
+  async function handleDeleteCloudMany() {
+    const ids = [...selectedRecordings];
+    if (ids.length === 0) return;
+    if (!confirm(t('delete.confirmCloud', { n: ids.length }))) return;
+    try {
+      setDeleting(true);
+      const res = await api.recording.deleteCloudMany(ids);
+      setSyncResult(t('delete.doneCloud', { ok: res.ok.length, failed: res.failed.length }));
+      closeDeleteDialog();
+      loadRecordings(1);
+    } catch (err: any) {
+      setError(err.message || 'Failed to delete from cloud');
+    } finally {
+      setDeleting(false);
+    }
+  }
+
+  function closeDeleteDialog() {
+    setDeleteDialogOpen(false);
+    setBatchMode(false);
+    setSelectedRecordings(new Set());
+  }
+
+  // === Rename ===
+  function openRename(rec: Recording) {
+    setRenameTarget(rec);
+    setRenameValue(rec.customName || '');
+  }
+
+  async function handleRenameSave() {
+    if (!renameTarget) return;
+    try {
+      setRenameSaving(true);
+      const value = renameValue.trim();
+      if (value) {
+        await api.recording.rename(renameTarget.id, value, false);
+      } else {
+        await api.recording.clearCustomName(renameTarget.id);
+      }
+      setRenameTarget(null);
+      loadRecordings();
+    } catch (err: any) {
+      setError(err.message || 'Failed to rename');
+    } finally {
+      setRenameSaving(false);
+    }
+  }
+
+  async function handleRenameReset() {
+    if (!renameTarget) return;
+    try {
+      setRenameSaving(true);
+      await api.recording.clearCustomName(renameTarget.id);
+      setRenameTarget(null);
+      loadRecordings();
+    } catch (err: any) {
+      setError(err.message || 'Failed to reset');
+    } finally {
+      setRenameSaving(false);
+    }
+  }
+
+  // === Rules ===
+  async function handleApplyRules() {
+    try {
+      setApplyingRules(true);
+      const n = await (api as any).renameRules.apply();
+      setSyncResult(t('rules.applied', { n }));
+      loadRecordings();
+    } catch (err: any) {
+      setError(err.message || 'Failed to apply rules');
+    } finally {
+      setApplyingRules(false);
+    }
+  }
+
+  // === Inline download controls ===
+  async function handleUploadFile(taskId: string) {
+    const googleApi = (api as any).google;
+    if (!googleApi) return;
+    try {
+      setUploading((prev) => new Set(prev).add(taskId));
+      await googleApi.upload(taskId);
+      loadDownloadTasks();
+    } catch (err: any) {
+      setError(`Upload failed: ${err.message}`);
+    } finally {
+      setUploading((prev) => { const next = new Set(prev); next.delete(taskId); return next; });
     }
   }
 
@@ -279,39 +433,11 @@ export function RecordingsPage() {
       if (!isWeb && (api as any).system?.openFolder) {
         await (api as any).system.openFolder(folderPath);
       } else {
-        // Web mode: copy path to clipboard
         await navigator.clipboard.writeText(folderPath);
         setSyncResult(`📋 ${t('recordings.pathCopied')}: ${folderPath}`);
       }
     } catch (err: any) {
       setError(err.message || 'Failed to open folder');
-    }
-  }
-
-  async function handleClear() {
-    const target = syncAccountId
-      ? accounts.find((a) => a.id === syncAccountId)?.name || 'this account'
-      : 'all accounts';
-    if (!confirm(`Clear all recordings from "${target}"? This only removes from the local list, not from Zoom Cloud.`)) return;
-    try {
-      setError(null);
-      const count = await api.recording.clear(syncAccountId || undefined);
-      setSyncResult(`Cleared ${count} recording(s)`);
-      loadRecordings(1);
-    } catch (err: any) {
-      setError(err.message || 'Failed to clear');
-    }
-  }
-
-  async function handleDeleteCloud(rec: Recording) {
-    if (!confirm(`Move "${rec.meetingTopic}" to Zoom Trash?\n\nRecording can be recovered within 30 days from Zoom Trash.`)) return;
-    try {
-      setError(null);
-      await api.recording.deleteFromCloud(rec.id);
-      setSyncResult(`Moved to trash: "${rec.meetingTopic}"`);
-      loadRecordings();
-    } catch (err: any) {
-      setError(err.message || 'Failed to delete from cloud');
     }
   }
 
@@ -327,19 +453,27 @@ export function RecordingsPage() {
     loadRecordings(1);
   }
 
-  const totalPages = Math.ceil(totalCount / 20);
+  // Tasks for a given recording (for inline merged Downloads view)
+  function tasksFor(recordingId: string): DownloadTask[] {
+    return downloadTasks.filter((task) => task.recordingId === recordingId);
+  }
+
+  const GROUPS_PER_PAGE = 15;
+  const allGroups = groupRecordings(recordings);
+  const totalPages = Math.max(1, Math.ceil(allGroups.length / GROUPS_PER_PAGE));
+  const pageGroups = allGroups.slice((page - 1) * GROUPS_PER_PAGE, page * GROUPS_PER_PAGE);
 
   return (
     <div className="page">
       <div className="page-header">
-        <h2>Recordings</h2>
+        <h2>{t('recordings.title')}</h2>
         <div className="header-actions">
           <select
             className="sync-account-select"
             value={syncAccountId}
             onChange={(e) => setSyncAccountId(e.target.value)}
           >
-            <option value="">All Accounts</option>
+            <option value="">{t('recordings.allAccounts')}</option>
             {accounts.map((a) => (
               <option key={a.id} value={a.id}>{a.name}</option>
             ))}
@@ -349,11 +483,14 @@ export function RecordingsPage() {
             onClick={() => syncAccountId ? handleSyncAccount(syncAccountId) : handleSyncAll()}
             disabled={syncing}
           >
-            {syncing ? 'Syncing...' : syncAccountId ? 'Sync Account' : 'Sync All'}
+            {syncing ? t('recordings.syncing') : syncAccountId ? t('recordings.syncAccount') : t('recordings.syncAll')}
+          </button>
+          <button className="btn" onClick={() => setRulesOpen(true)}>
+            ⚙ {t('rules.manage')}
           </button>
           {recordings.length > 0 && (
-            <button className="btn btn-danger" onClick={handleClear}>
-              Clear
+            <button className="btn btn-danger" onClick={handleClearList}>
+              {t('recordings.clear')}
             </button>
           )}
         </div>
@@ -388,7 +525,7 @@ export function RecordingsPage() {
               className={`toggle-btn ${scheduler.enabled ? 'toggle-on' : 'toggle-off'}`}
               onClick={toggleAutoSync}
             >
-              Auto Sync: {scheduler.enabled ? 'ON' : 'OFF'}
+              {t('recordings.autoSync')}: {scheduler.enabled ? t('recordings.on') : t('recordings.off')}
             </button>
 
             {scheduler.enabled && (
@@ -398,19 +535,19 @@ export function RecordingsPage() {
                   value={scheduler.intervalMinutes}
                   onChange={(e) => changeInterval(Number(e.target.value))}
                 >
-                  <option value={15}>15 min</option>
-                  <option value={30}>30 min</option>
-                  <option value={60}>1 hour</option>
-                  <option value={120}>2 hours</option>
-                  <option value={360}>6 hours</option>
-                  <option value={1440}>24 hours</option>
+                  <option value={15}>15 {t('recordings.min')}</option>
+                  <option value={30}>30 {t('recordings.min')}</option>
+                  <option value={60}>1 {t('recordings.min') === 'min' ? 'hour' : 'giờ'}</option>
+                  <option value={120}>2 {t('recordings.min') === 'min' ? 'hours' : 'giờ'}</option>
+                  <option value={360}>6 {t('recordings.min') === 'min' ? 'hours' : 'giờ'}</option>
+                  <option value={1440}>24 {t('recordings.min') === 'min' ? 'hours' : 'giờ'}</option>
                 </select>
 
                 <button
                   className={`toggle-btn ${scheduler.autoDownload ? 'toggle-on' : 'toggle-off'}`}
                   onClick={toggleAutoDownload}
                 >
-                  Auto Download: {scheduler.autoDownload ? 'ON' : 'OFF'}
+                  {t('recordings.autoDownload')}: {scheduler.autoDownload ? t('recordings.on') : t('recordings.off')}
                 </button>
               </>
             )}
@@ -418,14 +555,14 @@ export function RecordingsPage() {
 
           <div className="auto-sync-actions">
             {scheduler.isRunning && (
-              <span className="auto-sync-status">Next sync in {scheduler.intervalMinutes} min</span>
+              <span className="auto-sync-status">{t('recordings.nextSyncIn')} {scheduler.intervalMinutes} {t('recordings.min')}</span>
             )}
             <button
               className="btn btn-sm"
               onClick={handleRunSchedulerNow}
               disabled={schedulerBusy}
             >
-              {schedulerBusy ? 'Running...' : 'Run Now'}
+              {schedulerBusy ? t('recordings.running') : t('recordings.runNow')}
             </button>
           </div>
         </div>
@@ -436,7 +573,7 @@ export function RecordingsPage() {
           value={filter.accountId}
           onChange={(e) => setFilter({ ...filter, accountId: e.target.value })}
         >
-          <option value="">All Accounts</option>
+          <option value="">{t('recordings.allAccounts')}</option>
           {accounts.map((a) => (
             <option key={a.id} value={a.id}>{a.name}</option>
           ))}
@@ -445,34 +582,34 @@ export function RecordingsPage() {
           type="date"
           value={filter.from}
           onChange={(e) => setFilter({ ...filter, from: e.target.value })}
-          title="From date"
+          title={t('recordings.fromDate')}
         />
         <input
           type="date"
           value={filter.to}
           onChange={(e) => setFilter({ ...filter, to: e.target.value })}
-          title="To date"
+          title={t('recordings.toDate')}
         />
         <input
-          placeholder="Search meeting topic..."
+          placeholder={t('recordings.searchPlaceholder')}
           value={filter.search}
           onChange={(e) => setFilter({ ...filter, search: e.target.value })}
           onKeyDown={(e) => e.key === 'Enter' && handleFilter()}
         />
-        <button className="btn" onClick={handleFilter}>Filter</button>
+        <button className="btn" onClick={handleFilter}>{t('recordings.filter')}</button>
         <button
           className={`btn ${batchMode ? 'btn-danger' : 'btn-primary'}`}
           onClick={() => { setBatchMode(!batchMode); setSelectedRecordings(new Set()); }}
         >
-          {batchMode ? 'Cancel Batch' : 'Batch Download'}
+          {batchMode ? t('recordings.cancelBatch') : t('recordings.batchDownload')}
         </button>
       </div>
 
       {batchMode && (
         <div className="batch-toolbar">
-          <button className="btn btn-sm" onClick={selectAllRecordings}>Select All</button>
-          <button className="btn btn-sm" onClick={selectNoneRecordings}>Select None</button>
-          <span className="batch-count">{selectedRecordings.size} / {recordings.length} recording(s) selected</span>
+          <button className="btn btn-sm" onClick={selectAllRecordings}>{t('recordings.selectAll')}</button>
+          <button className="btn btn-sm" onClick={selectNoneRecordings}>{t('recordings.selectNone')}</button>
+          <span className="batch-count">{t('recordings.recordingsSelected', { n: selectedRecordings.size, total: recordings.length })}</span>
           <div style={{ flex: 1 }} />
           {isWeb && (
             <div className="device-selector">
@@ -481,7 +618,7 @@ export function RecordingsPage() {
                 value={selectedAgent}
                 onChange={(e) => setSelectedAgent(e.target.value)}
               >
-                <option value="server">💻 Server (local)</option>
+                <option value="server">💻 {t('recordings.serverLocal')}</option>
                 {agents.map((a) => (
                   <option key={a.id} value={a.id}>
                     {a.status === 'online' ? '🟢' : a.status === 'busy' ? '🟡' : '⚫'} {a.deviceName}
@@ -491,37 +628,49 @@ export function RecordingsPage() {
             </div>
           )}
           <button
+            className="btn btn-danger"
+            onClick={() => setDeleteDialogOpen(true)}
+            disabled={selectedRecordings.size === 0}
+          >
+            🗑 {t('delete.selected')}
+          </button>
+          <button
             className="btn btn-primary"
             onClick={handleBatchDownload}
             disabled={selectedRecordings.size === 0}
           >
-            Download {selectedRecordings.size} recording(s)
+            {t('recordings.downloadNRec', { n: selectedRecordings.size })}
           </button>
         </div>
       )}
 
       {loading ? (
-        <div className="empty-state">Loading recordings...</div>
+        <div className="empty-state">{t('recordings.loading')}</div>
       ) : (
         <>
           <div className="recording-list">
-            {groupByMeetingId(recordings).map((group) => (
-              <div key={group.meetingId} className="meeting-group">
-                {/* Meeting Group Header — shown when multiple recordings share same meeting ID */}
+            {pageGroups.map((group) => (
+              <div key={group.key} className="meeting-group">
                 {group.recordings.length > 1 && (
-                  <div className="meeting-group-header">
-                    <span className="meeting-id-tag" style={{ background: getMeetingColor(group.meetingId) }}>
+                  <div className="meeting-group-header" style={group.color ? { borderLeft: `4px solid ${group.color}` } : undefined}>
+                    <span className="meeting-id-tag" style={{ background: group.color || getMeetingColor(group.meetingId) }}>
                       {group.meetingId}
                     </span>
-                    <span className="meeting-group-topic">{group.topic}</span>
+                    <span className="meeting-group-topic">{group.name}</span>
                     <span className="meeting-group-count">
                       {group.recordings.length} {t('recordings.sessions')} &middot; {group.totalFiles} {t('recordings.files')} &middot; {formatSize(group.totalSize)}
                     </span>
                   </div>
                 )}
 
-                {group.recordings.map((rec) => (
-              <div key={rec.id} className={`recording-card ${batchMode && selectedRecordings.has(rec.id) ? 'batch-selected' : ''} ${group.recordings.length > 1 ? 'grouped-card' : ''}`}>
+                {group.recordings.map((rec) => {
+                  const recTasks = tasksFor(rec.id);
+                  return (
+              <div
+                key={rec.id}
+                className={`recording-card ${batchMode && selectedRecordings.has(rec.id) ? 'batch-selected' : ''} ${group.recordings.length > 1 ? 'grouped-card' : ''}`}
+                style={rec.customColor ? { borderLeft: `4px solid ${rec.customColor}` } : undefined}
+              >
                 <div className="recording-header" onClick={() => batchMode ? toggleBatchRecording(rec.id) : toggleExpand(rec.id)}>
                   {batchMode && (
                     <div className="batch-checkbox" onClick={(e) => e.stopPropagation()}>
@@ -538,16 +687,19 @@ export function RecordingsPage() {
                   <div className="recording-info">
                     <div className="recording-title-row">
                       {group.recordings.length <= 1 && (
-                        <span className="meeting-id-tag" style={{ background: getMeetingColor(rec.meetingId) }} title={`Meeting ID: ${rec.meetingId}`}>
+                        <span className="meeting-id-tag" style={{ background: rec.customColor || getMeetingColor(rec.meetingId) }} title={`${t('recordings.meetingId')}: ${rec.meetingId}`}>
                           {rec.meetingId}
                         </span>
                       )}
-                      <span className="recording-title" title={rec.meetingTopic}>{rec.meetingTopic}</span>
+                      <span className="recording-title" title={effectiveName(rec)}>{effectiveName(rec)}</span>
+                      {rec.customName && (
+                        <span className="custom-name-badge" title={`${t('rename.original')}: ${rec.meetingTopic}`}>✎</span>
+                      )}
                     </div>
                     <div className="recording-meta">
                       <span className="recording-account-tag">{getAccountName(rec.accountId)}</span>
                       {rec.hostEmail && <> &middot; {rec.hostEmail}</>}
-                       &middot; {formatDate(rec.startTime)} {formatTime(rec.startTime)} &middot; <span title="Duration">{formatDuration(rec.duration)}</span> &middot; {formatSize(rec.totalSize)}
+                       &middot; {formatDate(rec.startTime)} {formatTime(rec.startTime)} &middot; <span title={t('recordings.duration')}>{formatDuration(rec.duration)}</span> &middot; {formatSize(rec.totalSize)}
                     </div>
                   </div>
                   <div className="recording-badges">
@@ -587,14 +739,21 @@ export function RecordingsPage() {
                       onClick={() => openDownloadPicker(rec)}
                       disabled={rec.recordingFiles.length === 0}
                     >
-                      Download
+                      {t('recordings.download')}
+                    </button>
+                    <button
+                      className="btn btn-sm"
+                      onClick={() => openRename(rec)}
+                      title={t('rename.title')}
+                    >
+                      ✎ {t('recordings.rename')}
                     </button>
                     {rec.status !== 'deleted' && (
                       <button
                         className="btn btn-sm btn-danger"
-                        onClick={() => handleDeleteCloud(rec)}
+                        onClick={() => handleDeleteCloudSingle(rec)}
                       >
-                        Delete Cloud
+                        {t('recordings.deleteCloud')}
                       </button>
                     )}
                   </div>
@@ -604,9 +763,9 @@ export function RecordingsPage() {
                   <div className="recording-files">
                     {downloadPickerId === rec.id && (
                       <div className="file-picker-toolbar">
-                        <button className="btn btn-sm" onClick={() => selectAllFiles(rec)}>Select All</button>
-                        <button className="btn btn-sm" onClick={selectNoneFiles}>Select None</button>
-                        <span className="file-picker-count">{selectedFileIds.size} / {rec.recordingFiles.length} selected</span>
+                        <button className="btn btn-sm" onClick={() => selectAllFiles(rec)}>{t('recordings.selectAll')}</button>
+                        <button className="btn btn-sm" onClick={selectNoneFiles}>{t('recordings.selectNone')}</button>
+                        <span className="file-picker-count">{selectedFileIds.size} / {rec.recordingFiles.length} {t('recordings.selected')}</span>
                         <div style={{ flex: 1 }} />
                         {isWeb && (
                           <div className="device-selector">
@@ -615,7 +774,7 @@ export function RecordingsPage() {
                               value={selectedAgent}
                               onChange={(e) => setSelectedAgent(e.target.value)}
                             >
-                              <option value="server">💻 Server (local)</option>
+                              <option value="server">💻 {t('recordings.serverLocal')}</option>
                               {agents.map((a) => (
                                 <option key={a.id} value={a.id}>
                                   {a.status === 'online' ? '🟢' : a.status === 'busy' ? '🟡' : '⚫'} {a.deviceName}
@@ -623,7 +782,7 @@ export function RecordingsPage() {
                               ))}
                             </select>
                             {agents.length === 0 && (
-                              <span className="device-hint">No agents connected</span>
+                              <span className="device-hint">{t('recordings.noAgents')}</span>
                             )}
                           </div>
                         )}
@@ -632,23 +791,23 @@ export function RecordingsPage() {
                           onClick={() => handleDownloadSelected(rec)}
                           disabled={selectedFileIds.size === 0}
                         >
-                          Download {selectedFileIds.size} file(s)
+                          {t('recordings.downloadN', { n: selectedFileIds.size })}
                           {selectedAgent !== 'server' && agents.length > 0
                             ? ` → ${agents.find((a) => a.id === selectedAgent)?.deviceName || ''}`
                             : ''}
                         </button>
-                        <button className="btn btn-sm" onClick={() => setDownloadPickerId(null)}>Cancel</button>
+                        <button className="btn btn-sm" onClick={() => setDownloadPickerId(null)}>{t('common.cancel')}</button>
                       </div>
                     )}
                     <table>
                       <thead>
                         <tr>
                           {downloadPickerId === rec.id && <th style={{ width: 40 }}></th>}
-                          <th>File Type</th>
-                          <th>Format</th>
-                          <th>Size</th>
-                          <th>Status</th>
-                          <th>Action</th>
+                          <th>{t('recordings.fileType')}</th>
+                          <th>{t('recordings.format')}</th>
+                          <th>{t('recordings.size')}</th>
+                          <th>{t('recordings.status')}</th>
+                          <th>{t('recordings.action')}</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -676,48 +835,661 @@ export function RecordingsPage() {
                                 className="btn btn-sm btn-primary"
                                 onClick={() => handleDownloadFile(file)}
                               >
-                                Download
+                                {t('recordings.download')}
                               </button>
                             </td>
                           </tr>
                         ))}
                       </tbody>
                     </table>
+
+                    {/* Merged Downloads — progress & controls inline */}
+                    {recTasks.length > 0 && (
+                      <div className="inline-downloads">
+                        <div className="inline-downloads-title">⏬ {t('downloads.title')}</div>
+                        <table>
+                          <thead>
+                            <tr>
+                              <th>{t('downloads.fileType')}</th>
+                              <th>{t('downloads.size')}</th>
+                              <th>{t('downloads.progress')}</th>
+                              <th>{t('downloads.status')}</th>
+                              <th>{t('downloads.actions')}</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {recTasks.map((task) => (
+                              <tr key={task.id}>
+                                <td>{getFileTypeLabel(task.fileType)}</td>
+                                <td>{formatSize(task.fileSize)}</td>
+                                <td>
+                                  <div className="file-progress">
+                                    <div className="file-progress-bar">
+                                      <div
+                                        className={`file-progress-fill file-progress-${task.status}`}
+                                        style={{ width: `${task.progress}%` }}
+                                      />
+                                    </div>
+                                    <span className="file-progress-text">
+                                      {task.status === 'downloading' ? `${task.progress}%` :
+                                       task.status === 'completed' ? t('downloads.done') :
+                                       task.status === 'failed' ? t('downloads.error') :
+                                       task.status}
+                                    </span>
+                                  </div>
+                                </td>
+                                <td>
+                                  <span className={`status-badge status-${task.status}`}>{task.status}</span>
+                                </td>
+                                <td>
+                                  {task.status === 'downloading' && (
+                                    <button className="btn btn-sm" onClick={() => api.download.pause(task.id)}>{t('downloads.pause')}</button>
+                                  )}
+                                  {task.status === 'paused' && (
+                                    <button className="btn btn-sm btn-primary" onClick={() => api.download.resume(task.id)}>{t('downloads.resume')}</button>
+                                  )}
+                                  {task.status === 'failed' && (
+                                    <button className="btn btn-sm btn-primary" onClick={() => api.download.retry(task.id)}>{t('downloads.retry')}</button>
+                                  )}
+                                  {['queued', 'downloading', 'paused'].includes(task.status) && (
+                                    <button className="btn btn-sm btn-danger" onClick={() => api.download.cancel(task.id)}>{t('downloads.cancel')}</button>
+                                  )}
+                                  {task.status === 'completed' && gdriveConnected && (
+                                    task.uploadStatus === 'uploaded' ? (
+                                      <span className="status-badge status-completed" title={task.googleDriveFileId}>☁️ {t('downloads.uploaded')}</span>
+                                    ) : (
+                                      <button
+                                        className="btn btn-sm btn-primary"
+                                        onClick={() => handleUploadFile(task.id)}
+                                        disabled={uploading.has(task.id) || task.uploadStatus === 'uploading'}
+                                      >
+                                        {uploading.has(task.id) || task.uploadStatus === 'uploading' ? '⏳' : '☁️'} {t('downloads.uploadDrive')}
+                                      </button>
+                                    )
+                                  )}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
-                ))}
+                  );
+                })}
               </div>
             ))}
 
             {recordings.length === 0 && (
               <div className="empty-state">
-                No recordings found. Click "Sync All Accounts" to fetch from Zoom Cloud.
+                {t('recordings.noRecordings')}
               </div>
             )}
           </div>
 
           {totalPages > 1 && (
             <div className="pagination">
-              <button className="btn btn-sm" disabled={page <= 1} onClick={() => loadRecordings(page - 1)}>
-                Previous
+              <button className="btn btn-sm" disabled={page <= 1} onClick={() => setPage(page - 1)}>
+                {t('recordings.previous')}
               </button>
               <span className="pagination-info">
-                Page {page} / {totalPages} ({totalCount} recordings)
+                {t('recordings.page')} {page} / {totalPages} ({allGroups.length} {t('recordings.groupsUnit')} · {totalCount} {t('recordings.recordingsUnit')})
               </span>
-              <button className="btn btn-sm" disabled={page >= totalPages} onClick={() => loadRecordings(page + 1)}>
-                Next
+              <button className="btn btn-sm" disabled={page >= totalPages} onClick={() => setPage(page + 1)}>
+                {t('recordings.next')}
               </button>
             </div>
           )}
 
           {recordings.length > 0 && totalPages <= 1 && (
             <div className="pagination-info" style={{ marginTop: 12, textAlign: 'center' }}>
-              {totalCount} recording(s)
+              {allGroups.length} {t('recordings.groupsUnit')} · {totalCount} {t('recordings.recordingsUnit')}
             </div>
           )}
         </>
       )}
+
+      {/* Rename modal */}
+      {renameTarget && (
+        <div className="modal-overlay" onClick={() => !renameSaving && setRenameTarget(null)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3>{t('rename.title')}</h3>
+              <button className="modal-close" onClick={() => setRenameTarget(null)}>×</button>
+            </div>
+            <div className="modal-body">
+              <div className="form-group">
+                <label>{t('rename.label')}</label>
+                <input
+                  autoFocus
+                  value={renameValue}
+                  placeholder={t('rename.placeholder')}
+                  onChange={(e) => setRenameValue(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && handleRenameSave()}
+                />
+                <small className="form-hint">{t('rename.hint')}</small>
+                <small className="form-hint">{t('rename.original')}: <em>{renameTarget.meetingTopic}</em></small>
+              </div>
+            </div>
+            <div className="modal-footer">
+              {renameTarget.customName && (
+                <button className="btn" onClick={handleRenameReset} disabled={renameSaving}>
+                  {t('rename.reset')}
+                </button>
+              )}
+              <div style={{ flex: 1 }} />
+              <button className="btn" onClick={() => setRenameTarget(null)} disabled={renameSaving}>{t('common.cancel')}</button>
+              <button className="btn btn-primary" onClick={handleRenameSave} disabled={renameSaving}>
+                {renameSaving ? t('recordings.saving') : t('common.save')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete-scope dialog */}
+      {deleteDialogOpen && (
+        <div className="modal-overlay" onClick={() => !deleting && setDeleteDialogOpen(false)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3>{t('delete.title', { n: selectedRecordings.size })}</h3>
+              <button className="modal-close" onClick={() => setDeleteDialogOpen(false)}>×</button>
+            </div>
+            <div className="modal-body">
+              <p>{t('delete.chooseScope')}</p>
+              <button className="delete-scope-option" onClick={handleDeleteLocal} disabled={deleting}>
+                <strong>🗑 {t('delete.local')}</strong>
+                <span>{t('delete.localDesc')}</span>
+              </button>
+              <button className="delete-scope-option delete-scope-danger" onClick={handleDeleteCloudMany} disabled={deleting}>
+                <strong>☁️ {t('delete.cloud')}</strong>
+                <span>{t('delete.cloudDesc')}</span>
+              </button>
+            </div>
+            <div className="modal-footer">
+              <div style={{ flex: 1 }} />
+              <button className="btn" onClick={() => setDeleteDialogOpen(false)} disabled={deleting}>{t('common.cancel')}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Rules modal */}
+      {rulesOpen && (
+        <RulesModal
+          onClose={() => setRulesOpen(false)}
+          onApply={handleApplyRules}
+          applying={applyingRules}
+        />
+      )}
+    </div>
+  );
+
+  // === Handlers that reference component state but live below for readability ===
+  async function handleClearList() {
+    const target = syncAccountId
+      ? accounts.find((a) => a.id === syncAccountId)?.name || t('recordings.allAccountsTarget')
+      : t('recordings.allAccountsTarget');
+    if (!confirm(t('recordings.clearConfirm', { target }))) return;
+    try {
+      setError(null);
+      const count = await api.recording.clear(syncAccountId || undefined);
+      setSyncResult(`Cleared ${count} recording(s)`);
+      loadRecordings(1);
+    } catch (err: any) {
+      setError(err.message || 'Failed to clear');
+    }
+  }
+
+  async function handleDeleteCloudSingle(rec: Recording) {
+    if (!confirm(t('recordings.deleteCloudConfirm', { topic: effectiveName(rec) }))) return;
+    try {
+      setError(null);
+      await api.recording.deleteFromCloud(rec.id);
+      setSyncResult(`Moved to trash: "${effectiveName(rec)}"`);
+      loadRecordings();
+    } catch (err: any) {
+      setError(err.message || 'Failed to delete from cloud');
+    }
+  }
+}
+
+// ============================================================
+// Rules Modal
+// ============================================================
+
+interface RuleDraft {
+  id?: string;
+  meetingId: string;
+  startFrom: string;
+  startTo: string;
+  targetName: string;
+  color: string;
+  priority: number;
+  enabled: boolean;
+}
+
+function emptyDraft(): RuleDraft {
+  return { meetingId: '', startFrom: '', startTo: '', targetName: '', color: '', priority: 0, enabled: true };
+}
+
+// Preset palette for rule colors (matches the meeting-id-tag palette)
+const RULE_COLORS = [
+  '#6366f1', '#ec4899', '#f59e0b', '#10b981', '#3b82f6',
+  '#8b5cf6', '#ef4444', '#14b8a6', '#f97316', '#06b6d4',
+];
+
+interface MeetingOption { meetingId: string; name: string; }
+
+function ruleNormalizeId(id: string): string {
+  return String(id || '').replace(/\D/g, '');
+}
+
+function ruleValidTime(s: string): boolean {
+  return /^([01]?\d|2[0-3]):[0-5]\d$/.test(String(s).trim());
+}
+
+function ruleTimeToMin(s: string): number {
+  const [h, m] = s.split(':').map(Number);
+  return h * 60 + m;
+}
+
+function recLocalMinutes(iso: string): number {
+  const d = new Date(iso);
+  return d.getHours() * 60 + d.getMinutes();
+}
+
+interface FieldErrors {
+  meetingId?: string;
+  startFrom?: string;
+  startTo?: string;
+  targetName?: string;
+  range?: string;
+}
+
+function RulesModal({ onClose, onApply, applying }: { onClose: () => void; onApply: () => void; applying: boolean }) {
+  const { t } = useTranslation();
+  const [rules, setRules] = useState<RenameRule[]>([]);
+  const [draft, setDraft] = useState<RuleDraft>(emptyDraft());
+  const [editId, setEditId] = useState<string | null>(null);
+  const [errors, setErrors] = useState<FieldErrors>({});
+  const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  // Recordings (for the Meeting ID dropdown + live match preview)
+  const [recs, setRecs] = useState<Array<{ meetingId: string; meetingTopic: string; customName?: string; startTime: string }>>([]);
+
+  useEffect(() => { load(); loadRecs(); }, []);
+
+  async function load() {
+    try {
+      setLoading(true);
+      const list = await (api as any).renameRules.list();
+      setRules(list);
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function loadRecs() {
+    try {
+      const result = await api.recording.list({ pageSize: 1000, page: 1 });
+      setRecs(result.recordings.map((r: any) => ({ meetingId: r.meetingId, meetingTopic: r.meetingTopic, customName: r.customName, startTime: r.startTime })));
+    } catch {}
+  }
+
+  // Distinct meeting IDs with a friendly label for the dropdown
+  const meetingOptions: MeetingOption[] = (() => {
+    const map = new Map<string, string>();
+    for (const r of recs) {
+      if (!map.has(r.meetingId)) map.set(r.meetingId, r.customName || r.meetingTopic);
+    }
+    return [...map.entries()].map(([meetingId, name]) => ({ meetingId, name }));
+  })();
+
+  function validate(d: RuleDraft): FieldErrors {
+    const e: FieldErrors = {};
+    if (!d.meetingId.trim()) e.meetingId = t('rules.errMeeting');
+    if (!ruleValidTime(d.startFrom)) e.startFrom = t('rules.errTime');
+    if (!ruleValidTime(d.startTo)) e.startTo = t('rules.errTime');
+    if (!d.targetName.trim()) e.targetName = t('rules.errName');
+    if (!e.startFrom && !e.startTo && ruleTimeToMin(d.startFrom) > ruleTimeToMin(d.startTo)) {
+      e.range = t('rules.errRange');
+    }
+    return e;
+  }
+
+  // Live count of recordings the current draft would match
+  const matchCount: number | null = (() => {
+    if (!draft.meetingId.trim() || !ruleValidTime(draft.startFrom) || !ruleValidTime(draft.startTo)) return null;
+    const id = ruleNormalizeId(draft.meetingId);
+    const from = ruleTimeToMin(draft.startFrom);
+    const to = ruleTimeToMin(draft.startTo);
+    if (from > to) return null;
+    return recs.filter((r) => ruleNormalizeId(r.meetingId) === id && recLocalMinutes(r.startTime) >= from && recLocalMinutes(r.startTime) <= to).length;
+  })();
+
+  async function handleSave() {
+    const e = validate(draft);
+    setErrors(e);
+    if (Object.keys(e).length > 0) return;
+    try {
+      setSaving(true);
+      setError(null);
+      if (editId) {
+        await (api as any).renameRules.update(editId, draft);
+      } else {
+        await (api as any).renameRules.create({ ...draft, priority: rules.length });
+      }
+      resetForm();
+      load();
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function resetForm() {
+    setDraft(emptyDraft());
+    setEditId(null);
+    setErrors({});
+  }
+
+  function startEdit(rule: RenameRule) {
+    setEditId(rule.id);
+    setDraft({ ...rule, color: rule.color || '' });
+    setErrors({});
+  }
+
+  function useExample() {
+    setDraft({ meetingId: '820 7737 8037', startFrom: '11:30', startTo: '12:00', targetName: 'Quy Hoạch Cuộc Đời - Ca Trưa', color: '#f59e0b', priority: rules.length, enabled: true });
+    setErrors({});
+  }
+
+  async function handleDelete(id: string) {
+    try {
+      if (editId === id) resetForm();
+      await (api as any).renameRules.delete(id);
+      load();
+    } catch (e: any) { setError(e.message); }
+  }
+
+  async function toggleEnabled(rule: RenameRule) {
+    try {
+      await (api as any).renameRules.update(rule.id, { enabled: !rule.enabled });
+      load();
+    } catch (e: any) { setError(e.message); }
+  }
+
+  // Export all rules to a downloadable JSON file
+  function handleExport() {
+    if (rules.length === 0) { setError(t('rules.exportEmpty')); return; }
+    const payload = {
+      app: 'zoom-recording-downloader',
+      type: 'rename-rules',
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      rules: rules.map((r) => ({
+        meetingId: r.meetingId,
+        startFrom: r.startFrom,
+        startTo: r.startTo,
+        targetName: r.targetName,
+        color: r.color || '',
+        priority: r.priority,
+        enabled: r.enabled,
+      })),
+    };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `rename-rules-${new Date().toISOString().slice(0, 10)}.json`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+    setError(null);
+    setNotice(t('rules.exportDone', { n: rules.length }));
+  }
+
+  // Import rules from a JSON file (append, skipping exact duplicates)
+  async function handleImportFile(file: File) {
+    try {
+      const text = await file.text();
+      const data = JSON.parse(text);
+      const arr: any[] = Array.isArray(data) ? data : data?.rules;
+      if (!Array.isArray(arr)) { setError(t('rules.importInvalid')); return; }
+
+      const valid = arr.filter((r) =>
+        r && r.meetingId && r.targetName && ruleValidTime(String(r.startFrom)) && ruleValidTime(String(r.startTo)));
+      if (valid.length === 0) { setError(t('rules.importInvalid')); return; }
+
+      const sig = (m: string, f: string, tt: string, n: string) => `${ruleNormalizeId(m)}|${f}|${tt}|${n.trim().toLowerCase()}`;
+      const existing = new Set(rules.map((r) => sig(r.meetingId, r.startFrom, r.startTo, r.targetName)));
+      const toImport = valid.filter((r) => !existing.has(sig(String(r.meetingId), String(r.startFrom), String(r.startTo), String(r.targetName))));
+      const skipped = valid.length - toImport.length;
+
+      if (toImport.length === 0) { setError(null); setNotice(t('rules.importAllDup')); return; }
+      if (!confirm(t('rules.importConfirm', { n: toImport.length }))) return;
+
+      const base = rules.length;
+      for (let i = 0; i < toImport.length; i++) {
+        const r = toImport[i];
+        await (api as any).renameRules.create({
+          meetingId: String(r.meetingId),
+          startFrom: String(r.startFrom),
+          startTo: String(r.startTo),
+          targetName: String(r.targetName),
+          color: r.color || '',
+          priority: base + i,
+          enabled: r.enabled === false ? false : true,
+        });
+      }
+      setError(null);
+      setNotice(t('rules.importDone', { n: toImport.length, skipped }));
+      load();
+    } catch (e: any) {
+      setError(e.message || String(e));
+    }
+  }
+
+  // Reorder: reassign priority = position for the swapped pair
+  async function moveRule(index: number, dir: -1 | 1) {
+    const j = index + dir;
+    if (j < 0 || j >= rules.length) return;
+    const reordered = [...rules];
+    [reordered[index], reordered[j]] = [reordered[j], reordered[index]];
+    try {
+      await Promise.all(reordered.map((r, i) => (r.priority !== i ? (api as any).renameRules.update(r.id, { priority: i }) : null)).filter(Boolean));
+      load();
+    } catch (e: any) { setError(e.message); }
+  }
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal modal-lg" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-header">
+          <h3>{t('rules.title')}</h3>
+          <button className="modal-close" onClick={onClose}>×</button>
+        </div>
+        <div className="modal-body">
+          <p className="form-hint">{t('rules.desc')}</p>
+          {error && <div className="alert alert-error">{error}<button className="alert-close" onClick={() => setError(null)}>×</button></div>}
+          {notice && <div className="alert alert-success">{notice}<button className="alert-close" onClick={() => setNotice(null)}>×</button></div>}
+
+          {/* Existing rules */}
+          <div className="rules-toolbar">
+            <h4 className="rules-section-title">{t('rules.existingTitle')}</h4>
+            <div style={{ flex: 1 }} />
+            <button className="btn btn-sm" onClick={handleExport} disabled={rules.length === 0}>⬆ {t('rules.export')}</button>
+            <button className="btn btn-sm" onClick={() => fileInputRef.current?.click()}>⬇ {t('rules.import')}</button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="application/json,.json"
+              style={{ display: 'none' }}
+              onChange={(e) => { const f = e.target.files?.[0]; if (f) handleImportFile(f); e.target.value = ''; }}
+            />
+          </div>
+          {loading ? (
+            <div className="empty-state">{t('common.loading')}</div>
+          ) : rules.length === 0 ? (
+            <div className="empty-state">{t('rules.empty')}</div>
+          ) : (
+            <table className="rules-table">
+              <thead>
+                <tr>
+                  <th>{t('rules.enabled')}</th>
+                  <th>{t('rules.meetingId')}</th>
+                  <th>{t('rules.from')}</th>
+                  <th>{t('rules.to')}</th>
+                  <th>{t('rules.name')}</th>
+                  <th>{t('rules.color')}</th>
+                  <th>{t('rules.order')}</th>
+                  <th>{t('rules.actions')}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rules.map((rule, index) => (
+                  <tr key={rule.id} className={`${rule.enabled ? '' : 'rule-disabled'} ${editId === rule.id ? 'rule-editing' : ''}`}>
+                    <td><input type="checkbox" checked={rule.enabled} onChange={() => toggleEnabled(rule)} /></td>
+                    <td>{rule.meetingId}</td>
+                    <td>{rule.startFrom}</td>
+                    <td>{rule.startTo}</td>
+                    <td>{rule.targetName}</td>
+                    <td>
+                      {rule.color
+                        ? <span className="color-dot" style={{ background: rule.color }} />
+                        : <span className="color-dot-none">—</span>}
+                    </td>
+                    <td className="move-btns">
+                      <button className="btn btn-sm" title={t('rules.moveUp')} disabled={index === 0} onClick={() => moveRule(index, -1)}>⬆</button>
+                      <button className="btn btn-sm" title={t('rules.moveDown')} disabled={index === rules.length - 1} onClick={() => moveRule(index, 1)}>⬇</button>
+                    </td>
+                    <td>
+                      <button className="btn btn-sm" onClick={() => startEdit(rule)}>{t('common.edit')}</button>
+                      <button className="btn btn-sm btn-danger" onClick={() => handleDelete(rule.id)}>{t('common.delete')}</button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+
+          {/* Add / edit form panel */}
+          <div className="rule-form-panel">
+            <div className="rule-form-head">
+              <h4 className="rules-section-title">{editId ? t('rules.editTitle') : t('rules.addTitle')}</h4>
+              <button className="btn btn-sm" onClick={useExample}>💡 {t('rules.useExample')}</button>
+            </div>
+
+            <div className="rule-form-grid">
+              <div className="form-group">
+                <label>{t('rules.meetingId')}</label>
+                <input
+                  list="rule-meeting-options"
+                  className={errors.meetingId ? 'input-error' : ''}
+                  placeholder={t('rules.meetingPick')}
+                  value={draft.meetingId}
+                  onChange={(e) => setDraft({ ...draft, meetingId: e.target.value })}
+                />
+                <datalist id="rule-meeting-options">
+                  {meetingOptions.map((o) => (
+                    <option key={o.meetingId} value={o.meetingId}>{o.name}</option>
+                  ))}
+                </datalist>
+                {errors.meetingId && <small className="field-error">{errors.meetingId}</small>}
+              </div>
+
+              <div className="form-group form-group-sm">
+                <label>{t('rules.from')}</label>
+                <input
+                  type="time"
+                  className={errors.startFrom ? 'input-error' : ''}
+                  value={draft.startFrom}
+                  onChange={(e) => setDraft({ ...draft, startFrom: e.target.value })}
+                />
+                {errors.startFrom && <small className="field-error">{errors.startFrom}</small>}
+              </div>
+
+              <div className="form-group form-group-sm">
+                <label>{t('rules.to')}</label>
+                <input
+                  type="time"
+                  className={errors.startTo || errors.range ? 'input-error' : ''}
+                  value={draft.startTo}
+                  onChange={(e) => setDraft({ ...draft, startTo: e.target.value })}
+                />
+                {errors.startTo && <small className="field-error">{errors.startTo}</small>}
+              </div>
+
+              <div className="form-group form-group-full">
+                <label>{t('rules.name')}</label>
+                <input
+                  className={errors.targetName ? 'input-error' : ''}
+                  placeholder={t('rules.namePlaceholder')}
+                  value={draft.targetName}
+                  onChange={(e) => setDraft({ ...draft, targetName: e.target.value })}
+                />
+                {errors.targetName && <small className="field-error">{errors.targetName}</small>}
+              </div>
+
+              <div className="form-group form-group-full">
+                <label>{t('rules.color')}</label>
+                <div className="color-picker">
+                  <button
+                    type="button"
+                    className={`color-swatch color-none ${draft.color === '' ? 'color-selected' : ''}`}
+                    title={t('rules.noColor')}
+                    onClick={() => setDraft({ ...draft, color: '' })}
+                  >∅</button>
+                  {RULE_COLORS.map((c) => (
+                    <button
+                      type="button"
+                      key={c}
+                      className={`color-swatch ${draft.color === c ? 'color-selected' : ''}`}
+                      style={{ background: c }}
+                      onClick={() => setDraft({ ...draft, color: c })}
+                    />
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {errors.range && <small className="field-error">{errors.range}</small>}
+
+            <div className="rule-form-footer">
+              <label className="rule-enabled-toggle">
+                <input type="checkbox" checked={draft.enabled} onChange={(e) => setDraft({ ...draft, enabled: e.target.checked })} />
+                {t('rules.enabled')}
+              </label>
+              <span className={`match-preview ${matchCount === null ? '' : matchCount === 0 ? 'match-zero' : 'match-ok'}`}>
+                {matchCount === null ? t('rules.matchHint') : matchCount === 0 ? t('rules.matchNone') : t('rules.matchCount', { n: matchCount })}
+              </span>
+              <div style={{ flex: 1 }} />
+              {editId && <button className="btn" onClick={resetForm} disabled={saving}>{t('common.cancel')}</button>}
+              <button className="btn btn-primary" onClick={handleSave} disabled={saving}>
+                {saving ? t('recordings.saving') : (editId ? t('rules.saveRule') : `+ ${t('rules.add')}`)}
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div className="modal-footer">
+          <button className="btn btn-primary" onClick={onApply} disabled={applying}>
+            {applying ? t('rules.applying') : `▶ ${t('rules.applyNow')}`}
+          </button>
+          <div style={{ flex: 1 }} />
+          <button className="btn" onClick={onClose}>{t('common.close')}</button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -741,7 +1513,6 @@ function getFileTypeLabel(type: string): string {
   return FILE_TYPE_LABELS[type] || type.replace(/_/g, ' ');
 }
 
-// Color for Meeting ID — same ID always gets same color
 const MEETING_COLORS = [
   '#6366f1', '#ec4899', '#f59e0b', '#10b981', '#3b82f6',
   '#8b5cf6', '#ef4444', '#14b8a6', '#f97316', '#06b6d4',
@@ -756,7 +1527,6 @@ function getMeetingColor(meetingId: string): string {
   return MEETING_COLORS[Math.abs(hash) % MEETING_COLORS.length];
 }
 
-// File type icons
 function getFileTypeIcons(files: { fileType: string }[]): string[] {
   const types = new Set(files.map(f => f.fileType));
   const icons: string[] = [];
@@ -801,25 +1571,32 @@ function getDefaultFromDate(): string {
   return new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
 }
 
-// Group recordings by meeting_id for recurring meetings
 interface MeetingGroup {
+  key: string;
   meetingId: string;
-  topic: string;
+  name: string;
+  color?: string;
   recordings: Recording[];
   totalFiles: number;
   totalSize: number;
 }
 
-function groupByMeetingId(recordings: Recording[]): MeetingGroup[] {
+// Group by effective (rule-assigned) name + meeting ID. The same Zoom meeting ID
+// is often reused for different classes at different times; grouping by name as
+// well keeps each class together instead of lumping them under one ID.
+function groupRecordings(recordings: Recording[]): MeetingGroup[] {
   const groups = new Map<string, MeetingGroup>();
   const order: string[] = [];
 
   for (const rec of recordings) {
-    const key = rec.meetingId;
+    const name = effectiveName(rec);
+    const key = `${rec.meetingId}::${name.trim().toLowerCase()}`;
     if (!groups.has(key)) {
       groups.set(key, {
-        meetingId: key,
-        topic: rec.meetingTopic,
+        key,
+        meetingId: rec.meetingId,
+        name,
+        color: rec.customColor,
         recordings: [],
         totalFiles: 0,
         totalSize: 0,
@@ -830,6 +1607,7 @@ function groupByMeetingId(recordings: Recording[]): MeetingGroup[] {
     group.recordings.push(rec);
     group.totalFiles += rec.recordingFiles.length;
     group.totalSize += rec.totalSize;
+    if (!group.color && rec.customColor) group.color = rec.customColor;
   }
 
   return order.map((key) => groups.get(key)!);

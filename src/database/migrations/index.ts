@@ -2,11 +2,15 @@ import { Database as SqlJsDatabase } from 'sql.js';
 import { up as migration001 } from './001_initial';
 import { up as migration002 } from './002_recording_uuid';
 import { up as migration003 } from './003_download_enhancements';
+import { up as migration004 } from './004_rename_features';
+import { up as migration005 } from './005_rule_color';
 
 const migrations = [
   { version: 1, name: '001_initial', up: migration001 },
   { version: 2, name: '002_recording_uuid', up: migration002 },
   { version: 3, name: '003_download_enhancements', up: migration003 },
+  { version: 4, name: '004_rename_features', up: migration004 },
+  { version: 5, name: '005_rule_color', up: migration005 },
 ];
 
 export function runMigrations(db: SqlJsDatabase): void {

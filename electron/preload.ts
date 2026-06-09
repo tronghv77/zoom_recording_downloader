@@ -33,7 +33,20 @@ const api = {
       invoke<void>('recording:deleteFromCloud', id, permanent),
     rename: (id: string, newTopic: string, updateCloud: boolean) =>
       invoke<void>('recording:rename', id, newTopic, updateCloud),
+    clearCustomName: (id: string) => invoke<void>('recording:clearCustomName', id),
     clear: (accountId?: string) => invoke<number>('recording:clear', accountId),
+    deleteLocalMany: (ids: string[]) => invoke<number>('recording:deleteLocalMany', ids),
+    deleteCloudMany: (ids: string[], permanent?: boolean) =>
+      invoke<{ ok: string[]; failed: { id: string; error: string }[] }>('recording:deleteCloudMany', ids, permanent),
+  },
+
+  // Auto-rename rules
+  renameRules: {
+    list: () => invoke<any[]>('renameRules:list'),
+    create: (input: any) => invoke<any>('renameRules:create', input),
+    update: (id: string, input: any) => invoke<any>('renameRules:update', id, input),
+    delete: (id: string) => invoke<void>('renameRules:delete', id),
+    apply: () => invoke<number>('renameRules:apply'),
   },
 
   // Download

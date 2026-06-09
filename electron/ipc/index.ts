@@ -3,6 +3,7 @@ import { getDatabase } from '../../src/database/connection';
 import { AccountRepository } from '../../src/database/repositories/AccountRepository';
 import { RecordingRepository } from '../../src/database/repositories/RecordingRepository';
 import { DownloadRepository } from '../../src/database/repositories/DownloadRepository';
+import { RenameRuleRepository } from '../../src/database/repositories/RenameRuleRepository';
 import { SettingsRepository } from '../../src/database/repositories/SettingsRepository';
 import { AccountService } from '../../src/services/AccountService';
 import { RecordingService } from '../../src/services/RecordingService';
@@ -23,10 +24,11 @@ function getServices() {
     const accountRepo = new AccountRepository(db);
     const recordingRepo = new RecordingRepository(db);
     const downloadRepo = new DownloadRepository(db);
+    const renameRuleRepo = new RenameRuleRepository(db);
     settingsRepo = new SettingsRepository(db);
 
     accountService = new AccountService(accountRepo);
-    recordingService = new RecordingService(recordingRepo, accountService);
+    recordingService = new RecordingService(recordingRepo, accountService, renameRuleRepo);
     downloadService = new DownloadService(downloadRepo, recordingRepo, accountService);
     schedulerService = new SchedulerService(recordingService, downloadService, accountService, settingsRepo, recordingRepo);
     googleDriveService = new GoogleDriveService(settingsRepo, downloadRepo);
@@ -80,7 +82,23 @@ export function registerIpcHandlers(): void {
   safeHandle('recording:rename', (id: string, newTopic: string, updateCloud: boolean) =>
     services.recordingService.rename(id, newTopic, updateCloud),
   );
+  safeHandle('recording:clearCustomName', (id: string) =>
+    services.recordingService.clearCustomName(id),
+  );
   safeHandle('recording:clear', (accountId?: string) => services.recordingService.clearAll(accountId));
+  safeHandle('recording:deleteLocalMany', (ids: string[]) =>
+    services.recordingService.deleteLocalMany(ids),
+  );
+  safeHandle('recording:deleteCloudMany', (ids: string[], permanent?: boolean) =>
+    services.recordingService.deleteCloudMany(ids, permanent),
+  );
+
+  // === Rename rule handlers ===
+  safeHandle('renameRules:list', () => services.recordingService.listRules());
+  safeHandle('renameRules:create', (input) => services.recordingService.createRule(input));
+  safeHandle('renameRules:update', (id: string, input) => services.recordingService.updateRule(id, input));
+  safeHandle('renameRules:delete', (id: string) => services.recordingService.deleteRule(id));
+  safeHandle('renameRules:apply', async () => services.recordingService.applyRenameRules());
 
   // === Download handlers ===
   safeHandle('download:enqueue', (fileIds: string[], options) => {

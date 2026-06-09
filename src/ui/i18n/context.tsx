@@ -2,10 +2,12 @@ import React, { createContext, useContext, useState, useEffect, useCallback } fr
 import { Language, TranslationKey, translations } from './translations';
 import { api } from '../api/client';
 
+type TParams = Record<string, string | number>;
+
 interface I18nContextValue {
   lang: Language;
   setLang: (lang: Language) => void;
-  t: (key: TranslationKey) => string;
+  t: (key: TranslationKey, params?: TParams) => string;
 }
 
 const I18nContext = createContext<I18nContextValue>({
@@ -34,10 +36,15 @@ export function I18nProvider({ children }: { children: React.ReactNode }) {
     }).catch(() => {});
   }, []);
 
-  const t = useCallback((key: TranslationKey): string => {
+  const t = useCallback((key: TranslationKey, params?: TParams): string => {
     const entry = translations[key];
-    if (!entry) return key;
-    return entry[lang] || entry['en'] || key;
+    let text: string = entry ? (entry[lang] || entry['en'] || key) : key;
+    if (params) {
+      for (const [k, v] of Object.entries(params)) {
+        text = text.replace(new RegExp(`\\{${k}\\}`, 'g'), String(v));
+      }
+    }
+    return text;
   }, [lang]);
 
   return (

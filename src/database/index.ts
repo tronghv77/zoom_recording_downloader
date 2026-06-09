@@ -3,3 +3,4 @@ export { runMigrations } from './migrations';
 export { AccountRepository } from './repositories/AccountRepository';
 export { RecordingRepository } from './repositories/RecordingRepository';
 export { DownloadRepository } from './repositories/DownloadRepository';
+export { RenameRuleRepository } from './repositories/RenameRuleRepository';
