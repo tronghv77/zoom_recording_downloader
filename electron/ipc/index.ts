@@ -33,6 +33,11 @@ function getServices() {
     schedulerService = new SchedulerService(recordingService, downloadService, accountService, settingsRepo, recordingRepo);
     googleDriveService = new GoogleDriveService(settingsRepo, downloadRepo);
 
+    // Apply the saved "max concurrent downloads" setting and resume any
+    // downloads interrupted by a previous app close/crash.
+    downloadService.setMaxConcurrent(settingsRepo.getAll().maxConcurrentDownloads);
+    downloadService.recoverInterrupted();
+
     // Auto-start scheduler if enabled
     const schedulerConfig = schedulerService.getConfig();
     if (schedulerConfig.enabled) {
@@ -111,6 +116,7 @@ export function registerIpcHandlers(): void {
   safeHandle('download:retry', (taskId: string) => services.downloadService.retry(taskId));
   safeHandle('download:getQueue', () => services.downloadService.getQueue());
   safeHandle('download:getSummary', async () => services.downloadService.getSummary());
+  safeHandle('download:verify', async () => services.downloadService.verifyOnDisk());
   safeHandle('download:clear', async (status?: string) => services.downloadService.clearAll(status));
 
   // Forward download progress to renderer
@@ -125,7 +131,9 @@ export function registerIpcHandlers(): void {
   safeHandle('settings:getAll', async () => services.settingsRepo.getAll());
   safeHandle('settings:save', async (settings) => {
     services.settingsRepo.saveAll(settings);
-    return services.settingsRepo.getAll();
+    const saved = services.settingsRepo.getAll();
+    services.downloadService.setMaxConcurrent(saved.maxConcurrentDownloads);
+    return saved;
   });
 
   // === Scheduler handlers ===

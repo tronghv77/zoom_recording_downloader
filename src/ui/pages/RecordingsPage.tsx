@@ -35,6 +35,9 @@ export function RecordingsPage() {
   const [downloadTasks, setDownloadTasks] = useState<DownloadTask[]>([]);
   const [gdriveConnected, setGdriveConnected] = useState(false);
   const [uploading, setUploading] = useState<Set<string>>(new Set());
+  // On-disk verification: recordingId → { total, completed, present }
+  const [verifyMap, setVerifyMap] = useState<Record<string, { total: number; completed: number; present: number }>>({});
+  const [verifying, setVerifying] = useState(false);
 
   // Rename modal
   const [renameTarget, setRenameTarget] = useState<Recording | null>(null);
@@ -265,6 +268,46 @@ export function RecordingsPage() {
     }
   }
 
+  // #3 — Verify which recordings actually have their files on this machine's disk
+  async function handleVerify() {
+    try {
+      setVerifying(true);
+      const map = await (api as any).download.verify();
+      setVerifyMap(map || {});
+      let full = 0, partial = 0, missing = 0;
+      for (const v of Object.values(map || {}) as Array<{ total: number; completed: number; present: number }>) {
+        if (v.present > 0 && v.present >= v.total) full++;
+        else if (v.present > 0) partial++;
+        else missing++;
+      }
+      setSyncResult(t('recordings.checkDone', { full, partial, missing }));
+    } catch (err: any) {
+      setError(err.message || 'Verify failed');
+    } finally {
+      setVerifying(false);
+    }
+  }
+
+  // #2 — Resume/continue an unfinished download for one recording
+  async function handleResume(rec: Recording, recTasks: DownloadTask[]) {
+    try {
+      for (const task of recTasks) {
+        if (task.status === 'paused') await api.download.resume(task.id);
+        else if (task.status === 'failed' || task.status === 'cancelled') await api.download.retry(task.id);
+      }
+      // Enqueue any files that never got a task (e.g. partial earlier selection)
+      const tasked = new Set(recTasks.map((t) => t.recordingFileId));
+      const missing = rec.recordingFiles.filter((f) => !tasked.has(f.id)).map((f) => f.id);
+      if (missing.length > 0) {
+        const dir = await getDownloadDir();
+        if (dir) await api.download.enqueue(missing, { destinationDir: dir });
+      }
+      setTimeout(() => { loadDownloadTasks(); refreshDownloadSummary(); }, 300);
+    } catch (err: any) {
+      setError(err.message || 'Resume failed');
+    }
+  }
+
   async function handleDownloadFile(file: RecordingFile) {
     try {
       const dir = await getDownloadDir();
@@ -488,6 +531,9 @@ export function RecordingsPage() {
           <button className="btn" onClick={() => setRulesOpen(true)}>
             ⚙ {t('rules.manage')}
           </button>
+          <button className="btn" onClick={handleVerify} disabled={verifying}>
+            🔍 {verifying ? t('recordings.checking') : t('recordings.checkDownloaded')}
+          </button>
           {recordings.length > 0 && (
             <button className="btn btn-danger" onClick={handleClearList}>
               {t('recordings.clear')}
@@ -665,6 +711,7 @@ export function RecordingsPage() {
 
                 {group.recordings.map((rec) => {
                   const recTasks = tasksFor(rec.id);
+                  const dl = recTasks.length ? summarizeTasks(recTasks) : null;
                   return (
               <div
                 key={rec.id}
@@ -701,6 +748,48 @@ export function RecordingsPage() {
                       {rec.hostEmail && <> &middot; {rec.hostEmail}</>}
                        &middot; {formatDate(rec.startTime)} {formatTime(rec.startTime)} &middot; <span title={t('recordings.duration')}>{formatDuration(rec.duration)}</span> &middot; {formatSize(rec.totalSize)}
                     </div>
+                    {(dl || verifyMap[rec.id] || downloadSummary[rec.id]) && (
+                      <div className="rec-substatus">
+                        {dl && (
+                          <div className={`rec-progress download-${dl.status}`} title={`${formatSize(dl.downloadedSize)} / ${formatSize(dl.totalSize)}`}>
+                            <div className="download-progress-bar">
+                              <div className="download-progress-fill" style={{ width: `${dl.overallProgress}%` }} />
+                            </div>
+                            <span className="download-percent">
+                              {dl.status === 'completed' ? t('downloads.done')
+                                : dl.status === 'failed' ? `${dl.completed}/${dl.total} ${t('downloads.failed')}`
+                                : `${dl.overallProgress}%`}
+                            </span>
+                          </div>
+                        )}
+                        {!dl && downloadSummary[rec.id] && (
+                          <span className={`download-badge download-${downloadSummary[rec.id].status}`} title={downloadSummary[rec.id].folderPath || ''}>
+                            {downloadSummary[rec.id].status === 'completed' ? '✅' :
+                             downloadSummary[rec.id].status === 'downloading' ? '⏬' :
+                             downloadSummary[rec.id].status === 'failed' ? '❌' : '⏳'}
+                            {' '}{downloadSummary[rec.id].completedCount}/{downloadSummary[rec.id].totalCount}
+                            {downloadSummary[rec.id].agentId ? ` 📱 ${downloadSummary[rec.id].agentId.replace('agent-', '')}` : ' 💻 Server'}
+                          </span>
+                        )}
+                        {verifyMap[rec.id] && (() => {
+                          const v = verifyMap[rec.id];
+                          const full = v.present > 0 && v.present >= v.total;
+                          const cls = full ? 'verify-full' : v.present > 0 ? 'verify-partial' : 'verify-missing';
+                          const label = full ? t('recordings.dlFull') : v.present > 0 ? t('recordings.dlPartial') : t('recordings.dlMissing');
+                          const icon = full ? '✅' : v.present > 0 ? '⚠️' : '❌';
+                          return <span className={`verify-badge ${cls}`} title={`${v.present}/${v.total}`}>{icon} {label} ({v.present}/{v.total})</span>;
+                        })()}
+                        {downloadSummary[rec.id]?.status === 'completed' && downloadSummary[rec.id]?.folderPath && (
+                          <button
+                            className="btn btn-sm btn-open-folder"
+                            onClick={(e) => { e.stopPropagation(); handleOpenFolder(downloadSummary[rec.id].folderPath); }}
+                            title={downloadSummary[rec.id].folderPath}
+                          >
+                            📂 {t('recordings.openFolder')}
+                          </button>
+                        )}
+                      </div>
+                    )}
                   </div>
                   <div className="recording-badges">
                     <span className="file-type-icons" title={rec.recordingFiles.map(f => getFileTypeLabel(f.fileType)).join(', ')}>
@@ -708,32 +797,14 @@ export function RecordingsPage() {
                     </span>
                     <span className="file-count">{rec.recordingFiles.length} {t('recordings.files')}</span>
                     <span className={`status-badge status-${rec.status}`}>{rec.status}</span>
-                    {downloadSummary[rec.id] && (
-                      <span
-                        className={`download-badge download-${downloadSummary[rec.id].status}`}
-                        title={downloadSummary[rec.id].folderPath || ''}
-                      >
-                        {downloadSummary[rec.id].status === 'completed' ? '✅' :
-                         downloadSummary[rec.id].status === 'downloading' ? '⏬' :
-                         downloadSummary[rec.id].status === 'failed' ? '❌' : '⏳'}
-                        {' '}
-                        {downloadSummary[rec.id].completedCount}/{downloadSummary[rec.id].totalCount}
-                        {downloadSummary[rec.id].agentId
-                          ? ` 📱 ${downloadSummary[rec.id].agentId.replace('agent-', '')}`
-                          : ' 💻 Server'}
-                      </span>
-                    )}
-                    {downloadSummary[rec.id]?.status === 'completed' && downloadSummary[rec.id]?.folderPath && (
-                      <button
-                        className="btn btn-sm btn-open-folder"
-                        onClick={(e) => { e.stopPropagation(); handleOpenFolder(downloadSummary[rec.id].folderPath); }}
-                        title={downloadSummary[rec.id].folderPath}
-                      >
-                        📂 {t('recordings.openFolder')}
-                      </button>
-                    )}
                   </div>
                   <div className="recording-actions" onClick={(e) => e.stopPropagation()}>
+                    {dl && (dl.status === 'paused' || dl.status === 'failed') && (
+                      <button className="btn btn-sm btn-primary" onClick={() => handleResume(rec, recTasks)} title={t('recordings.resume')}>
+                        ▶ {t('recordings.resume')}
+                      </button>
+                    )}
+                    <button className="btn btn-sm" onClick={handleVerify} disabled={verifying} title={t('recordings.check')}>🔍</button>
                     <button
                       className="btn btn-sm btn-primary"
                       onClick={() => openDownloadPicker(rec)}
@@ -1065,6 +1136,8 @@ interface RuleDraft {
   meetingId: string;
   startFrom: string;
   startTo: string;
+  dateFrom: string;
+  dateTo: string;
   targetName: string;
   color: string;
   priority: number;
@@ -1072,7 +1145,7 @@ interface RuleDraft {
 }
 
 function emptyDraft(): RuleDraft {
-  return { meetingId: '', startFrom: '', startTo: '', targetName: '', color: '', priority: 0, enabled: true };
+  return { meetingId: '', startFrom: '', startTo: '', dateFrom: '', dateTo: '', targetName: '', color: '', priority: 0, enabled: true };
 }
 
 // Preset palette for rule colors (matches the meeting-id-tag palette)
@@ -1101,6 +1174,21 @@ function recLocalMinutes(iso: string): number {
   return d.getHours() * 60 + d.getMinutes();
 }
 
+function recLocalDateStr(iso: string): string {
+  const d = new Date(iso);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+// Format 'YYYY-MM-DD' → 'DD/MM' for compact table display
+function shortDate(s?: string): string {
+  if (!s) return '';
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s);
+  return m ? `${m[3]}/${m[2]}` : s;
+}
+
 interface FieldErrors {
   meetingId?: string;
   startFrom?: string;
@@ -1109,16 +1197,149 @@ interface FieldErrors {
   range?: string;
 }
 
+// Live count of recordings the current draft would match
+function computeRuleMatch(draft: RuleDraft, recs: Array<{ meetingId: string; startTime: string }>): number | null {
+  if (!draft.meetingId.trim() || !ruleValidTime(draft.startFrom) || !ruleValidTime(draft.startTo)) return null;
+  const id = ruleNormalizeId(draft.meetingId);
+  const from = ruleTimeToMin(draft.startFrom);
+  const to = ruleTimeToMin(draft.startTo);
+  if (from > to) return null;
+  return recs.filter((r) =>
+    ruleNormalizeId(r.meetingId) === id &&
+    recLocalMinutes(r.startTime) >= from && recLocalMinutes(r.startTime) <= to &&
+    (!draft.dateFrom || recLocalDateStr(r.startTime) >= draft.dateFrom) &&
+    (!draft.dateTo || recLocalDateStr(r.startTime) <= draft.dateTo)
+  ).length;
+}
+
+// Reusable rule form fields (used by both the Add panel and the Edit dialog).
+function RuleFormFields({ draft, setDraft, errors, meetingOptions, recs, datalistId, actions }: {
+  draft: RuleDraft;
+  setDraft: (d: RuleDraft) => void;
+  errors: FieldErrors;
+  meetingOptions: MeetingOption[];
+  recs: Array<{ meetingId: string; startTime: string }>;
+  datalistId: string;
+  actions: React.ReactNode;
+}) {
+  const { t } = useTranslation();
+  const matchCount = computeRuleMatch(draft, recs);
+  return (
+    <>
+      <div className="rule-form-grid">
+        <div className="form-group">
+          <label>{t('rules.meetingId')}</label>
+          <input
+            list={datalistId}
+            className={errors.meetingId ? 'input-error' : ''}
+            placeholder={t('rules.meetingPick')}
+            value={draft.meetingId}
+            onChange={(e) => setDraft({ ...draft, meetingId: e.target.value })}
+          />
+          <datalist id={datalistId}>
+            {meetingOptions.map((o) => (
+              <option key={o.meetingId} value={o.meetingId}>{o.name}</option>
+            ))}
+          </datalist>
+          {errors.meetingId && <small className="field-error">{errors.meetingId}</small>}
+        </div>
+
+        <div className="form-group form-group-sm">
+          <label>{t('rules.from')}</label>
+          <input
+            type="time"
+            className={errors.startFrom ? 'input-error' : ''}
+            value={draft.startFrom}
+            onChange={(e) => setDraft({ ...draft, startFrom: e.target.value })}
+          />
+          {errors.startFrom && <small className="field-error">{errors.startFrom}</small>}
+        </div>
+
+        <div className="form-group form-group-sm">
+          <label>{t('rules.to')}</label>
+          <input
+            type="time"
+            className={errors.startTo || errors.range ? 'input-error' : ''}
+            value={draft.startTo}
+            onChange={(e) => setDraft({ ...draft, startTo: e.target.value })}
+          />
+          {errors.startTo && <small className="field-error">{errors.startTo}</small>}
+        </div>
+
+        <div className="form-group form-group-full">
+          <label>{t('rules.name')}</label>
+          <input
+            className={errors.targetName ? 'input-error' : ''}
+            placeholder={t('rules.namePlaceholder')}
+            value={draft.targetName}
+            onChange={(e) => setDraft({ ...draft, targetName: e.target.value })}
+          />
+          {errors.targetName && <small className="field-error">{errors.targetName}</small>}
+        </div>
+
+        <div className="form-group form-group-full">
+          <label>{t('rules.dateRange')}</label>
+          <div className="date-range-row">
+            <input type="date" value={draft.dateFrom} onChange={(e) => setDraft({ ...draft, dateFrom: e.target.value })} />
+            <span className="date-range-sep">→</span>
+            <input type="date" value={draft.dateTo} onChange={(e) => setDraft({ ...draft, dateTo: e.target.value })} />
+          </div>
+          <small className="form-hint">{t('rules.dateRangeHint')}</small>
+        </div>
+
+        <div className="form-group form-group-full">
+          <label>{t('rules.color')}</label>
+          <div className="color-picker">
+            <button
+              type="button"
+              className={`color-swatch color-none ${draft.color === '' ? 'color-selected' : ''}`}
+              title={t('rules.noColor')}
+              onClick={() => setDraft({ ...draft, color: '' })}
+            >∅</button>
+            {RULE_COLORS.map((c) => (
+              <button
+                type="button"
+                key={c}
+                className={`color-swatch ${draft.color === c ? 'color-selected' : ''}`}
+                style={{ background: c }}
+                onClick={() => setDraft({ ...draft, color: c })}
+              />
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {errors.range && <small className="field-error">{errors.range}</small>}
+
+      <div className="rule-form-footer">
+        <label className="rule-enabled-toggle">
+          <input type="checkbox" checked={draft.enabled} onChange={(e) => setDraft({ ...draft, enabled: e.target.checked })} />
+          {t('rules.enabled')}
+        </label>
+        <span className={`match-preview ${matchCount === null ? '' : matchCount === 0 ? 'match-zero' : 'match-ok'}`}>
+          {matchCount === null ? t('rules.matchHint') : matchCount === 0 ? t('rules.matchNone') : t('rules.matchCount', { n: matchCount })}
+        </span>
+        <div style={{ flex: 1 }} />
+        {actions}
+      </div>
+    </>
+  );
+}
+
 function RulesModal({ onClose, onApply, applying }: { onClose: () => void; onApply: () => void; applying: boolean }) {
   const { t } = useTranslation();
   const [rules, setRules] = useState<RenameRule[]>([]);
-  const [draft, setDraft] = useState<RuleDraft>(emptyDraft());
+  const [addDraft, setAddDraft] = useState<RuleDraft>(emptyDraft());
+  const [addErrors, setAddErrors] = useState<FieldErrors>({});
+  const [addSaving, setAddSaving] = useState(false);
+  // Edit is shown in a centered dialog so it's never lost at the bottom
   const [editId, setEditId] = useState<string | null>(null);
-  const [errors, setErrors] = useState<FieldErrors>({});
+  const [editDraft, setEditDraft] = useState<RuleDraft>(emptyDraft());
+  const [editErrors, setEditErrors] = useState<FieldErrors>({});
+  const [editSaving, setEditSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   // Recordings (for the Meeting ID dropdown + live match preview)
   const [recs, setRecs] = useState<Array<{ meetingId: string; meetingTopic: string; customName?: string; startTime: string }>>([]);
@@ -1165,58 +1386,63 @@ function RulesModal({ onClose, onApply, applying }: { onClose: () => void; onApp
     return e;
   }
 
-  // Live count of recordings the current draft would match
-  const matchCount: number | null = (() => {
-    if (!draft.meetingId.trim() || !ruleValidTime(draft.startFrom) || !ruleValidTime(draft.startTo)) return null;
-    const id = ruleNormalizeId(draft.meetingId);
-    const from = ruleTimeToMin(draft.startFrom);
-    const to = ruleTimeToMin(draft.startTo);
-    if (from > to) return null;
-    return recs.filter((r) => ruleNormalizeId(r.meetingId) === id && recLocalMinutes(r.startTime) >= from && recLocalMinutes(r.startTime) <= to).length;
-  })();
-
-  async function handleSave() {
-    const e = validate(draft);
-    setErrors(e);
+  async function handleAdd() {
+    const e = validate(addDraft);
+    setAddErrors(e);
     if (Object.keys(e).length > 0) return;
     try {
-      setSaving(true);
+      setAddSaving(true);
       setError(null);
-      if (editId) {
-        await (api as any).renameRules.update(editId, draft);
-      } else {
-        await (api as any).renameRules.create({ ...draft, priority: rules.length });
-      }
-      resetForm();
+      await (api as any).renameRules.create({ ...addDraft, priority: rules.length });
+      setAddDraft(emptyDraft());
+      setAddErrors({});
       load();
     } catch (err: any) {
       setError(err.message);
     } finally {
-      setSaving(false);
+      setAddSaving(false);
     }
   }
 
-  function resetForm() {
-    setDraft(emptyDraft());
-    setEditId(null);
-    setErrors({});
+  function openEdit(rule: RenameRule) {
+    setEditId(rule.id);
+    setEditDraft({ ...rule, color: rule.color || '', dateFrom: rule.dateFrom || '', dateTo: rule.dateTo || '' });
+    setEditErrors({});
   }
 
-  function startEdit(rule: RenameRule) {
-    setEditId(rule.id);
-    setDraft({ ...rule, color: rule.color || '' });
-    setErrors({});
+  function closeEdit() {
+    setEditId(null);
+    setEditErrors({});
+  }
+
+  async function handleEditSave() {
+    if (!editId) return;
+    const e = validate(editDraft);
+    setEditErrors(e);
+    if (Object.keys(e).length > 0) return;
+    try {
+      setEditSaving(true);
+      setError(null);
+      await (api as any).renameRules.update(editId, editDraft);
+      closeEdit();
+      load();
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setEditSaving(false);
+    }
   }
 
   function useExample() {
-    setDraft({ meetingId: '820 7737 8037', startFrom: '11:30', startTo: '12:00', targetName: 'Quy Hoạch Cuộc Đời - Ca Trưa', color: '#f59e0b', priority: rules.length, enabled: true });
-    setErrors({});
+    setAddDraft({ meetingId: '820 7737 8037', startFrom: '11:30', startTo: '12:00', dateFrom: '', dateTo: '', targetName: 'Quy Hoạch Cuộc Đời - Ca Trưa', color: '#f59e0b', priority: rules.length, enabled: true });
+    setAddErrors({});
   }
 
-  async function handleDelete(id: string) {
+  async function handleDelete(rule: RenameRule) {
+    if (!confirm(t('rules.deleteConfirm', { name: rule.targetName }))) return;
     try {
-      if (editId === id) resetForm();
-      await (api as any).renameRules.delete(id);
+      if (editId === rule.id) closeEdit();
+      await (api as any).renameRules.delete(rule.id);
       load();
     } catch (e: any) { setError(e.message); }
   }
@@ -1240,6 +1466,8 @@ function RulesModal({ onClose, onApply, applying }: { onClose: () => void; onApp
         meetingId: r.meetingId,
         startFrom: r.startFrom,
         startTo: r.startTo,
+        dateFrom: r.dateFrom || '',
+        dateTo: r.dateTo || '',
         targetName: r.targetName,
         color: r.color || '',
         priority: r.priority,
@@ -1286,6 +1514,8 @@ function RulesModal({ onClose, onApply, applying }: { onClose: () => void; onApp
           meetingId: String(r.meetingId),
           startFrom: String(r.startFrom),
           startTo: String(r.startTo),
+          dateFrom: r.dateFrom ? String(r.dateFrom) : '',
+          dateTo: r.dateTo ? String(r.dateTo) : '',
           targetName: String(r.targetName),
           color: r.color || '',
           priority: base + i,
@@ -1313,6 +1543,7 @@ function RulesModal({ onClose, onApply, applying }: { onClose: () => void; onApp
   }
 
   return (
+    <>
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal modal-lg" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
@@ -1350,6 +1581,7 @@ function RulesModal({ onClose, onApply, applying }: { onClose: () => void; onApp
                   <th>{t('rules.meetingId')}</th>
                   <th>{t('rules.from')}</th>
                   <th>{t('rules.to')}</th>
+                  <th>{t('rules.dateRangeCol')}</th>
                   <th>{t('rules.name')}</th>
                   <th>{t('rules.color')}</th>
                   <th>{t('rules.order')}</th>
@@ -1363,6 +1595,11 @@ function RulesModal({ onClose, onApply, applying }: { onClose: () => void; onApp
                     <td>{rule.meetingId}</td>
                     <td>{rule.startFrom}</td>
                     <td>{rule.startTo}</td>
+                    <td className="rule-date-cell">
+                      {rule.dateFrom || rule.dateTo
+                        ? `${shortDate(rule.dateFrom) || '…'}–${shortDate(rule.dateTo) || '…'}`
+                        : <span className="color-dot-none">{t('rules.allDates')}</span>}
+                    </td>
                     <td>{rule.targetName}</td>
                     <td>
                       {rule.color
@@ -1374,8 +1611,10 @@ function RulesModal({ onClose, onApply, applying }: { onClose: () => void; onApp
                       <button className="btn btn-sm" title={t('rules.moveDown')} disabled={index === rules.length - 1} onClick={() => moveRule(index, 1)}>⬇</button>
                     </td>
                     <td>
-                      <button className="btn btn-sm" onClick={() => startEdit(rule)}>{t('common.edit')}</button>
-                      <button className="btn btn-sm btn-danger" onClick={() => handleDelete(rule.id)}>{t('common.delete')}</button>
+                      <div className="rule-actions-cell">
+                        <button className="btn btn-sm btn-icon" title={t('common.edit')} onClick={() => openEdit(rule)}>✎</button>
+                        <button className="btn btn-sm btn-icon btn-danger" title={t('common.delete')} onClick={() => handleDelete(rule)}>🗑</button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -1383,102 +1622,25 @@ function RulesModal({ onClose, onApply, applying }: { onClose: () => void; onApp
             </table>
           )}
 
-          {/* Add / edit form panel */}
+          {/* Add new rule */}
           <div className="rule-form-panel">
             <div className="rule-form-head">
-              <h4 className="rules-section-title">{editId ? t('rules.editTitle') : t('rules.addTitle')}</h4>
+              <h4 className="rules-section-title">{t('rules.addTitle')}</h4>
               <button className="btn btn-sm" onClick={useExample}>💡 {t('rules.useExample')}</button>
             </div>
-
-            <div className="rule-form-grid">
-              <div className="form-group">
-                <label>{t('rules.meetingId')}</label>
-                <input
-                  list="rule-meeting-options"
-                  className={errors.meetingId ? 'input-error' : ''}
-                  placeholder={t('rules.meetingPick')}
-                  value={draft.meetingId}
-                  onChange={(e) => setDraft({ ...draft, meetingId: e.target.value })}
-                />
-                <datalist id="rule-meeting-options">
-                  {meetingOptions.map((o) => (
-                    <option key={o.meetingId} value={o.meetingId}>{o.name}</option>
-                  ))}
-                </datalist>
-                {errors.meetingId && <small className="field-error">{errors.meetingId}</small>}
-              </div>
-
-              <div className="form-group form-group-sm">
-                <label>{t('rules.from')}</label>
-                <input
-                  type="time"
-                  className={errors.startFrom ? 'input-error' : ''}
-                  value={draft.startFrom}
-                  onChange={(e) => setDraft({ ...draft, startFrom: e.target.value })}
-                />
-                {errors.startFrom && <small className="field-error">{errors.startFrom}</small>}
-              </div>
-
-              <div className="form-group form-group-sm">
-                <label>{t('rules.to')}</label>
-                <input
-                  type="time"
-                  className={errors.startTo || errors.range ? 'input-error' : ''}
-                  value={draft.startTo}
-                  onChange={(e) => setDraft({ ...draft, startTo: e.target.value })}
-                />
-                {errors.startTo && <small className="field-error">{errors.startTo}</small>}
-              </div>
-
-              <div className="form-group form-group-full">
-                <label>{t('rules.name')}</label>
-                <input
-                  className={errors.targetName ? 'input-error' : ''}
-                  placeholder={t('rules.namePlaceholder')}
-                  value={draft.targetName}
-                  onChange={(e) => setDraft({ ...draft, targetName: e.target.value })}
-                />
-                {errors.targetName && <small className="field-error">{errors.targetName}</small>}
-              </div>
-
-              <div className="form-group form-group-full">
-                <label>{t('rules.color')}</label>
-                <div className="color-picker">
-                  <button
-                    type="button"
-                    className={`color-swatch color-none ${draft.color === '' ? 'color-selected' : ''}`}
-                    title={t('rules.noColor')}
-                    onClick={() => setDraft({ ...draft, color: '' })}
-                  >∅</button>
-                  {RULE_COLORS.map((c) => (
-                    <button
-                      type="button"
-                      key={c}
-                      className={`color-swatch ${draft.color === c ? 'color-selected' : ''}`}
-                      style={{ background: c }}
-                      onClick={() => setDraft({ ...draft, color: c })}
-                    />
-                  ))}
-                </div>
-              </div>
-            </div>
-
-            {errors.range && <small className="field-error">{errors.range}</small>}
-
-            <div className="rule-form-footer">
-              <label className="rule-enabled-toggle">
-                <input type="checkbox" checked={draft.enabled} onChange={(e) => setDraft({ ...draft, enabled: e.target.checked })} />
-                {t('rules.enabled')}
-              </label>
-              <span className={`match-preview ${matchCount === null ? '' : matchCount === 0 ? 'match-zero' : 'match-ok'}`}>
-                {matchCount === null ? t('rules.matchHint') : matchCount === 0 ? t('rules.matchNone') : t('rules.matchCount', { n: matchCount })}
-              </span>
-              <div style={{ flex: 1 }} />
-              {editId && <button className="btn" onClick={resetForm} disabled={saving}>{t('common.cancel')}</button>}
-              <button className="btn btn-primary" onClick={handleSave} disabled={saving}>
-                {saving ? t('recordings.saving') : (editId ? t('rules.saveRule') : `+ ${t('rules.add')}`)}
-              </button>
-            </div>
+            <RuleFormFields
+              draft={addDraft}
+              setDraft={setAddDraft}
+              errors={addErrors}
+              meetingOptions={meetingOptions}
+              recs={recs}
+              datalistId="rule-meeting-options-add"
+              actions={
+                <button className="btn btn-primary" onClick={handleAdd} disabled={addSaving}>
+                  {addSaving ? t('recordings.saving') : `+ ${t('rules.add')}`}
+                </button>
+              }
+            />
           </div>
         </div>
 
@@ -1491,6 +1653,37 @@ function RulesModal({ onClose, onApply, applying }: { onClose: () => void; onApp
         </div>
       </div>
     </div>
+
+    {/* Edit dialog — centered so it's never lost at the bottom of a long list */}
+    {editId && (
+      <div className="modal-overlay" onClick={closeEdit}>
+        <div className="modal" onClick={(e) => e.stopPropagation()}>
+          <div className="modal-header">
+            <h3>{t('rules.editTitle')}</h3>
+            <button className="modal-close" onClick={closeEdit}>×</button>
+          </div>
+          <div className="modal-body">
+            <RuleFormFields
+              draft={editDraft}
+              setDraft={setEditDraft}
+              errors={editErrors}
+              meetingOptions={meetingOptions}
+              recs={recs}
+              datalistId="rule-meeting-options-edit"
+              actions={
+                <>
+                  <button className="btn" onClick={closeEdit} disabled={editSaving}>{t('common.cancel')}</button>
+                  <button className="btn btn-primary" onClick={handleEditSave} disabled={editSaving}>
+                    {editSaving ? t('recordings.saving') : t('rules.saveRule')}
+                  </button>
+                </>
+              }
+            />
+          </div>
+        </div>
+      </div>
+    )}
+    </>
   );
 }
 
@@ -1544,6 +1737,22 @@ function formatSize(bytes: number): string {
   const units = ['B', 'KB', 'MB', 'GB'];
   const i = Math.floor(Math.log(bytes) / Math.log(1024));
   return `${(bytes / Math.pow(1024, i)).toFixed(1)} ${units[i]}`;
+}
+
+// Aggregate the download tasks of one recording into a single progress summary.
+function summarizeTasks(tasks: DownloadTask[]) {
+  const totalSize = tasks.reduce((s, t) => s + t.fileSize, 0);
+  const downloadedSize = tasks.reduce((s, t) => s + t.bytesDownloaded, 0);
+  const completed = tasks.filter((t) => t.status === 'completed').length;
+  let status: string = 'queued';
+  if (tasks.some((t) => t.status === 'downloading')) status = 'downloading';
+  else if (completed === tasks.length) status = 'completed';
+  else if (tasks.some((t) => t.status === 'failed')) status = 'failed';
+  else if (tasks.some((t) => t.status === 'paused')) status = 'paused';
+  const overallProgress = totalSize > 0
+    ? Math.round((downloadedSize / totalSize) * 100)
+    : (completed === tasks.length ? 100 : 0);
+  return { totalSize, downloadedSize, completed, total: tasks.length, overallProgress, status };
 }
 
 function formatDuration(minutes: number): string {

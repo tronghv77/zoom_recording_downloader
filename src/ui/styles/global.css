@@ -1885,3 +1885,73 @@ tr:hover td {
   margin: 16px 0 8px;
 }
 .rules-toolbar .rules-section-title { margin: 0; }
+
+/* === Rule date range === */
+.date-range-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.date-range-row input[type="date"] { flex: 1; }
+.date-range-sep { color: var(--text-secondary); }
+.rule-date-cell { white-space: nowrap; font-size: 12px; }
+
+/* === Rule action buttons (edit/delete, well separated) === */
+.rule-actions-cell {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+.btn-icon {
+  padding: 4px 10px;
+  font-size: 14px;
+  line-height: 1;
+}
+
+/* === Download progress bar on the recording card (below the meta line) === */
+.rec-progress {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 8px;
+}
+.rec-progress .download-progress-bar {
+  width: 100%;
+  max-width: 320px;
+}
+.rec-progress .download-percent { min-width: 42px; }
+.download-downloading .download-progress-fill {
+  background: linear-gradient(90deg, var(--accent), var(--accent-hover));
+}
+.download-paused .download-progress-fill { background: var(--text-secondary); }
+.download-queued .download-progress-fill { background: var(--text-secondary); opacity: 0.6; }
+
+/* === About: Share === */
+.about-share { margin-top: 20px; }
+.about-share h4 { margin: 0 0 4px; }
+.about-share-desc { color: var(--text-secondary); font-size: 13px; margin: 0 0 10px; }
+.about-share-actions { display: flex; flex-wrap: wrap; gap: 10px; }
+
+/* === Verify-on-disk badge === */
+.verify-badge {
+  padding: 4px 10px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.verify-full { background: rgba(34, 197, 94, 0.15); color: var(--success); }
+.verify-partial { background: rgba(245, 158, 11, 0.15); color: var(--warning); }
+.verify-missing { background: rgba(239, 68, 68, 0.15); color: var(--danger); }
+
+/* === Recording status sub-row (below meta — never squeezes the title) === */
+.rec-substatus {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 14px;
+  margin-top: 8px;
+}
+.rec-substatus .rec-progress { margin-top: 0; }
+.rec-substatus .download-progress-bar { width: 220px; max-width: 40vw; }
+.rec-substatus .btn-open-folder { padding: 2px 8px; }

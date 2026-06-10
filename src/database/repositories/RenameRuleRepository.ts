@@ -21,13 +21,15 @@ export class RenameRuleRepository {
   create(input: Omit<RenameRule, 'id' | 'createdAt'>): RenameRule {
     const id = randomUUID();
     this.db.run(
-      `INSERT INTO rename_rules (id, meeting_id, start_from, start_to, target_name, color, priority, enabled)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO rename_rules (id, meeting_id, start_from, start_to, date_from, date_to, target_name, color, priority, enabled)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         id,
         normalizeMeetingId(input.meetingId),
         input.startFrom,
         input.startTo,
+        input.dateFrom || null,
+        input.dateTo || null,
         input.targetName,
         input.color || null,
         input.priority ?? 0,
@@ -43,11 +45,13 @@ export class RenameRuleRepository {
     if (!existing) throw new Error(`Rename rule not found: ${id}`);
     const merged = { ...existing, ...input };
     this.db.run(
-      `UPDATE rename_rules SET meeting_id = ?, start_from = ?, start_to = ?, target_name = ?, color = ?, priority = ?, enabled = ? WHERE id = ?`,
+      `UPDATE rename_rules SET meeting_id = ?, start_from = ?, start_to = ?, date_from = ?, date_to = ?, target_name = ?, color = ?, priority = ?, enabled = ? WHERE id = ?`,
       [
         normalizeMeetingId(merged.meetingId),
         merged.startFrom,
         merged.startTo,
+        merged.dateFrom || null,
+        merged.dateTo || null,
         merged.targetName,
         merged.color || null,
         merged.priority ?? 0,
@@ -79,6 +83,8 @@ export class RenameRuleRepository {
       meetingId: row.meeting_id as string,
       startFrom: row.start_from as string,
       startTo: row.start_to as string,
+      dateFrom: (row.date_from as string) || undefined,
+      dateTo: (row.date_to as string) || undefined,
       targetName: row.target_name as string,
       color: (row.color as string) || undefined,
       priority: (row.priority as number) ?? 0,

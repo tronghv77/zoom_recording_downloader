@@ -34,6 +34,17 @@ export class DownloadRepository {
     return this.mapObject(row);
   }
 
+  findByFileId(recordingFileId: string): DownloadTask | null {
+    const stmt = this.db.prepare(
+      'SELECT * FROM download_tasks WHERE recording_file_id = ? ORDER BY created_at DESC LIMIT 1',
+    );
+    stmt.bind([recordingFileId]);
+    if (!stmt.step()) { stmt.free(); return null; }
+    const row = stmt.getAsObject();
+    stmt.free();
+    return this.mapObject(row);
+  }
+
   findByStatus(status: DownloadTaskStatus): DownloadTask[] {
     const result = this.db.exec(
       'SELECT * FROM download_tasks WHERE status = ? ORDER BY created_at ASC',

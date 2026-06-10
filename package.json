@@ -1,6 +1,6 @@
 {
   "name": "zoom-recording-downloader",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "description": "Hybrid desktop app for managing and downloading Zoom Cloud recordings across multiple accounts and devices",
   "main": "dist/electron/electron/main.js",
   "scripts": {
@@ -16,6 +16,7 @@
     "preview": "vite preview",
     "lint": "eslint src/ electron/ server/",
     "typecheck": "tsc --noEmit",
+    "test": "tsc -p tsconfig.electron.json && node scripts/smoke-test.cjs && node scripts/feature-test.cjs",
     "build:agent": "node scripts/build-agent.js",
     "build:agent:exe": "node scripts/build-agent.js --exe"
   },

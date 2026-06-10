@@ -53,7 +53,7 @@ export function App() {
       headers: { 'User-Agent': 'ZoomDL' },
     }).then(r => r.json()).then(data => {
       const latest = (data.tag_name || '').replace(/^v/, '');
-      const current = '1.2.0';
+      const current = '1.3.0';
       const [lM, lm = 0, lp = 0] = latest.split('.').map(Number);
       const [cM, cm = 0, cp = 0] = current.split('.').map(Number);
       if (lM > cM || (lM === cM && lm > cm) || (lM === cM && lm === cm && lp > cp)) {

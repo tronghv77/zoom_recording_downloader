@@ -20,10 +20,44 @@ export class DownloadService implements IDownloadService {
     private accountService: AccountService,
   ) {}
 
+  // Apply the user's "Max Concurrent Downloads" setting (default stays 3).
+  setMaxConcurrent(n: number): void {
+    if (Number.isFinite(n) && n >= 1 && n <= 10) {
+      this.maxConcurrent = Math.floor(n);
+      this.processQueue();
+    }
+  }
+
+  // On app startup, tasks left as 'downloading' from a previous session (the app
+  // was closed/crashed mid-download) are stuck — the in-memory queue is empty.
+  // Reset them to 'queued' so they resume automatically.
+  recoverInterrupted(): number {
+    const stuck = this.downloadRepo.findByStatus('downloading');
+    for (const t of stuck) {
+      this.downloadRepo.resetProgress(t.id);
+      this.downloadRepo.updateStatus(t.id, 'queued');
+    }
+    if (stuck.length > 0) this.processQueue();
+    return stuck.length;
+  }
+
   async enqueue(recordingFileIds: string[], options: DownloadOptions, folderTemplate?: string): Promise<DownloadTask[]> {
     const tasks: DownloadTask[] = [];
 
     for (const fileId of recordingFileIds) {
+      // Avoid duplicate rows: reuse an existing task for the same file.
+      const existing = this.downloadRepo.findByFileId(fileId);
+      if (existing) {
+        if (existing.status === 'queued' || existing.status === 'downloading') {
+          tasks.push(existing); // already in progress — skip
+          continue;
+        }
+        // completed / failed / cancelled / paused → re-download in place
+        this.downloadRepo.resetProgress(existing.id);
+        this.downloadRepo.updateStatus(existing.id, 'queued');
+        tasks.push(this.downloadRepo.findById(existing.id)!);
+        continue;
+      }
       const task = this.downloadRepo.createTask(fileId, options, folderTemplate);
       tasks.push(task);
     }
@@ -48,7 +82,16 @@ export class DownloadService implements IDownloadService {
       this.activeDownloads.delete(taskId);
     }
     this.downloadRepo.updateStatus(taskId, 'paused');
-    this.emitProgress({ taskId, progress: 0, bytesDownloaded: 0, totalBytes: 0, speed: 0, status: 'paused' });
+    // Keep the current progress on the UI (don't reset the bar to 0%)
+    const task = this.downloadRepo.findById(taskId);
+    this.emitProgress({
+      taskId,
+      progress: task?.progress ?? 0,
+      bytesDownloaded: task?.bytesDownloaded ?? 0,
+      totalBytes: task?.fileSize ?? 0,
+      speed: 0,
+      status: 'paused',
+    });
   }
 
   async resume(taskId: string): Promise<void> {
@@ -63,7 +106,19 @@ export class DownloadService implements IDownloadService {
       this.activeDownloads.delete(taskId);
     }
     this.downloadRepo.updateStatus(taskId, 'cancelled');
+    this.deletePartialFile(taskId); // remove the half-downloaded file
     this.emitProgress({ taskId, progress: 0, bytesDownloaded: 0, totalBytes: 0, speed: 0, status: 'cancelled' });
+  }
+
+  // Delete a leftover partial/incomplete file (after cancel or failure) so it
+  // doesn't masquerade as a real download during on-disk verification.
+  private deletePartialFile(taskId: string): void {
+    try {
+      const task = this.downloadRepo.findById(taskId);
+      if (task && task.destinationPath && fs.existsSync(task.destinationPath)) {
+        fs.unlinkSync(task.destinationPath);
+      }
+    } catch { /* ignore */ }
   }
 
   async retry(taskId: string): Promise<void> {
@@ -78,6 +133,28 @@ export class DownloadService implements IDownloadService {
 
   getSummary(): Record<string, any> {
     return this.downloadRepo.getDownloadSummary();
+  }
+
+  // Verify which recordings have their downloaded files actually present on disk.
+  // Returns per recordingId: total tasks, completed tasks, and files found on disk.
+  verifyOnDisk(): Record<string, { total: number; completed: number; present: number }> {
+    const tasks = this.downloadRepo.findAll();
+    const map: Record<string, { total: number; completed: number; present: number }> = {};
+    for (const task of tasks) {
+      if (task.agentId) continue; // remote-agent downloads are not on this machine
+      const r = map[task.recordingId] || (map[task.recordingId] = { total: 0, completed: 0, present: 0 });
+      r.total++;
+      if (task.status === 'completed') r.completed++;
+      try {
+        if (task.destinationPath && fs.existsSync(task.destinationPath)) {
+          // Count as present only if the file is actually complete on disk
+          // (a partial/aborted file would otherwise be a false positive).
+          const size = fs.statSync(task.destinationPath).size;
+          if (size > 0 && (task.fileSize <= 0 || size >= task.fileSize * 0.98)) r.present++;
+        }
+      } catch { /* ignore */ }
+    }
+    return map;
   }
 
   clearAll(status?: string): number {
@@ -225,6 +302,7 @@ export class DownloadService implements IDownloadService {
 
       const message = error instanceof Error ? error.message : 'Unknown error';
       this.downloadRepo.updateError(task.id, message);
+      this.deletePartialFile(task.id); // clean up the incomplete file
       this.emitProgress({
         taskId: task.id,
         progress: 0,

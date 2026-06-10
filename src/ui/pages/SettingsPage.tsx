@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { api, isElectron, isWeb } from '../api/client';
 import { useTranslation } from '../i18n';
-import type { Language } from '../i18n';
+import type { Language, TranslationKey } from '../i18n';
 
 interface AppSettings {
   defaultDownloadDir: string;
@@ -12,13 +12,14 @@ interface AppSettings {
   theme: string;
 }
 
-const FOLDER_TEMPLATES = [
-  { value: '{account}/{year}-{month}/{topic}', label: 'Account / Year-Month / Topic' },
-  { value: '{account}/{year}-{month}/{date} {time} - {topic}', label: 'Account / Year-Month / Date Time - Topic' },
-  { value: '{account}/{topic}/{date} {time}', label: 'Account / Topic / Date Time' },
-  { value: '{year}-{month}/{topic}', label: 'Year-Month / Topic' },
-  { value: '{topic}', label: 'Topic only' },
-  { value: '{topic} ({date} {time})', label: 'Topic (Date Time)' },
+const FOLDER_TEMPLATES: { value: string; labelKey: TranslationKey }[] = [
+  { value: '{account}/{year}-{month}/{topic}', labelKey: 'settings.tplAccYmTopic' },
+  { value: '{account}/{year}-{month}/{date} {time} - {topic}', labelKey: 'settings.tplAccYmDtTopic' },
+  { value: '{account}/{topic}/{date} {time}', labelKey: 'settings.tplAccTopicDt' },
+  { value: '{account}/{topic}', labelKey: 'settings.tplAccTopic' },
+  { value: '{year}-{month}/{topic}', labelKey: 'settings.tplYmTopic' },
+  { value: '{topic}', labelKey: 'settings.tplTopic' },
+  { value: '{topic} ({date} {time})', labelKey: 'settings.tplTopicDt' },
 ];
 
 export function SettingsPage() {
@@ -40,6 +41,7 @@ export function SettingsPage() {
   const [gdriveFolderId, setGdriveFolderId] = useState('');
   const [gdriveAutoUpload, setGdriveAutoUpload] = useState(false);
   const [gdriveConnecting, setGdriveConnecting] = useState(false);
+  const [shareCopied, setShareCopied] = useState(false);
 
   useEffect(() => {
     loadSettings();
@@ -75,7 +77,7 @@ export function SettingsPage() {
       });
       const data = await res.json();
       const latestVersion = (data.tag_name || '').replace(/^v/, '');
-      const currentVersion = '1.0.0';
+      const currentVersion = '1.3.0';
       const exeAsset = data.assets?.find((a: any) => a.name.includes('Setup'));
       const downloadUrl = exeAsset?.browser_download_url || data.html_url || '';
 
@@ -225,7 +227,7 @@ export function SettingsPage() {
     }
   }
 
-  if (loading || !settings) return <div className="page"><div className="empty-state">Loading settings...</div></div>;
+  if (loading || !settings) return <div className="page"><div className="empty-state">{t('settings.loading')}</div></div>;
 
   return (
     <div className="page">
@@ -247,28 +249,26 @@ export function SettingsPage() {
       )}
 
       <div className="settings-section">
-        <h3>Download</h3>
+        <h3>{t('settings.sectionDownload')}</h3>
 
         <div className="form-group">
-          <label>Default Download Directory</label>
+          <label>{t('settings.downloadDir')}</label>
           <div className="input-with-button">
             <input
               value={settings.defaultDownloadDir}
               onChange={(e) => setSettings({ ...settings, defaultDownloadDir: e.target.value })}
-              placeholder="No default directory set — will ask each time"
+              placeholder={t('settings.downloadDirPlaceholder')}
             />
-            <button className="btn" onClick={handleSelectDir}>Browse</button>
+            <button className="btn" onClick={handleSelectDir}>{t('settings.browse')}</button>
           </div>
           <small>
-            {isElectron
-              ? 'Leave empty to choose directory each time you download'
-              : 'Enter absolute path on server (e.g. D:\\ZoomRecordings)'}
+            {isElectron ? t('settings.downloadDirHint') : t('settings.downloadDirHintServer')}
           </small>
         </div>
 
         <div className="form-row">
           <div className="form-group">
-            <label>Max Concurrent Downloads</label>
+            <label>{t('settings.maxConcurrent')}</label>
             <select
               value={settings.maxConcurrentDownloads}
               onChange={(e) => setSettings({ ...settings, maxConcurrentDownloads: Number(e.target.value) })}
@@ -280,45 +280,45 @@ export function SettingsPage() {
           </div>
 
           <div className="form-group">
-            <label>Auto-start Downloads</label>
+            <label>{t('settings.autoStart')}</label>
             <select
               value={settings.autoStartDownload ? 'true' : 'false'}
               onChange={(e) => setSettings({ ...settings, autoStartDownload: e.target.value === 'true' })}
             >
-              <option value="true">Yes — start downloading immediately</option>
-              <option value="false">No — add to queue only</option>
+              <option value="true">{t('settings.autoStartYes')}</option>
+              <option value="false">{t('settings.autoStartNo')}</option>
             </select>
           </div>
         </div>
       </div>
 
       <div className="settings-section">
-        <h3>File Organization</h3>
+        <h3>{t('settings.sectionFileOrg')}</h3>
 
         <div className="form-group">
-          <label>Folder Structure Template</label>
+          <label>{t('settings.folderTemplate')}</label>
           <select
             value={settings.folderTemplate}
             onChange={(e) => setSettings({ ...settings, folderTemplate: e.target.value })}
           >
-            {FOLDER_TEMPLATES.map((t) => (
-              <option key={t.value} value={t.value}>{t.label}</option>
+            {FOLDER_TEMPLATES.map((tpl) => (
+              <option key={tpl.value} value={tpl.value}>{t(tpl.labelKey)}</option>
             ))}
           </select>
           <small>
-            Preview: <code className="template-preview">{previewTemplate(settings.folderTemplate)}</code>
+            {t('settings.preview')}: <code className="template-preview">{previewTemplate(settings.folderTemplate)}</code>
           </small>
         </div>
 
         <div className="template-vars">
-          <h4>Available variables:</h4>
+          <h4>{t('settings.availableVars')}</h4>
           <div className="var-list">
-            <span className="var-tag">{'{account}'}</span> Account name
-            <span className="var-tag">{'{topic}'}</span> Meeting topic
-            <span className="var-tag">{'{year}'}</span> Year (2026)
-            <span className="var-tag">{'{month}'}</span> Month (03)
-            <span className="var-tag">{'{date}'}</span> Full date (2026-03-17)
-            <span className="var-tag">{'{time}'}</span> Time (14-30)
+            <span className="var-tag">{'{account}'}</span> {t('settings.varAccount')}
+            <span className="var-tag">{'{topic}'}</span> {t('settings.varTopic')}
+            <span className="var-tag">{'{year}'}</span> {t('settings.varYear')}
+            <span className="var-tag">{'{month}'}</span> {t('settings.varMonth')}
+            <span className="var-tag">{'{date}'}</span> {t('settings.varDate')}
+            <span className="var-tag">{'{time}'}</span> {t('settings.varTime')}
           </div>
         </div>
       </div>
@@ -326,60 +326,60 @@ export function SettingsPage() {
       {scheduler && (
         <div className="settings-section">
           <div className="section-header">
-            <h3>Scheduler</h3>
+            <h3>{t('settings.sectionScheduler')}</h3>
             {schedulerStatus && (
               <span className={`status-badge ${schedulerStatus.isRunning ? 'status-active' : 'status-queued'}`}>
-                {schedulerStatus.isRunning ? 'Running' : 'Stopped'}
+                {schedulerStatus.isRunning ? t('settings.running') : t('settings.stopped')}
               </span>
             )}
           </div>
 
           <div className="form-row">
             <div className="form-group">
-              <label>Auto Sync</label>
+              <label>{t('settings.autoSync')}</label>
               <select
                 value={scheduler.enabled ? 'true' : 'false'}
                 onChange={(e) => setScheduler({ ...scheduler, enabled: e.target.value === 'true' })}
               >
-                <option value="false">Disabled</option>
-                <option value="true">Enabled</option>
+                <option value="false">{t('settings.disabled')}</option>
+                <option value="true">{t('settings.enabledOpt')}</option>
               </select>
             </div>
             <div className="form-group">
-              <label>Sync Interval</label>
+              <label>{t('settings.syncInterval')}</label>
               <select
                 value={scheduler.intervalMinutes}
                 onChange={(e) => setScheduler({ ...scheduler, intervalMinutes: Number(e.target.value) })}
               >
-                <option value={15}>Every 15 minutes</option>
-                <option value={30}>Every 30 minutes</option>
-                <option value={60}>Every 1 hour</option>
-                <option value={120}>Every 2 hours</option>
-                <option value={360}>Every 6 hours</option>
-                <option value={720}>Every 12 hours</option>
-                <option value={1440}>Every 24 hours</option>
+                <option value={15}>{t('settings.every15')}</option>
+                <option value={30}>{t('settings.every30')}</option>
+                <option value={60}>{t('settings.every1h')}</option>
+                <option value={120}>{t('settings.every2h')}</option>
+                <option value={360}>{t('settings.every6h')}</option>
+                <option value={720}>{t('settings.every12h')}</option>
+                <option value={1440}>{t('settings.every24h')}</option>
               </select>
             </div>
           </div>
 
           <div className="form-group">
-            <label>Auto Download after Sync</label>
+            <label>{t('settings.autoDownloadAfter')}</label>
             <select
               value={scheduler.autoDownload ? 'true' : 'false'}
               onChange={(e) => setScheduler({ ...scheduler, autoDownload: e.target.value === 'true' })}
             >
-              <option value="false">No — sync only</option>
-              <option value="true">Yes — sync & download new recordings</option>
+              <option value="false">{t('settings.autoDlNo')}</option>
+              <option value="true">{t('settings.autoDlYes')}</option>
             </select>
-            <small>Requires default download directory to be set</small>
+            <small>{t('settings.autoDlHint')}</small>
           </div>
 
           <div className="form-actions">
             <button className="btn btn-primary" onClick={handleSaveScheduler}>
-              Save Scheduler
+              {t('settings.saveScheduler')}
             </button>
             <button className="btn" onClick={handleRunNow} disabled={runningNow}>
-              {runningNow ? 'Running...' : 'Run Now'}
+              {runningNow ? t('settings.runningNow') : t('settings.runNow')}
             </button>
           </div>
 
@@ -394,7 +394,7 @@ export function SettingsPage() {
       )}
 
       <div className="settings-section">
-        <h3>{t('settings.title')}</h3>
+        <h3>{t('settings.sectionAppearance')}</h3>
 
         <div className="form-row">
           <div className="form-group">
@@ -428,8 +428,8 @@ export function SettingsPage() {
             value={settings.minimizeToTray ? 'true' : 'false'}
             onChange={(e) => setSettings({ ...settings, minimizeToTray: e.target.value === 'true' })}
           >
-            <option value="false">No</option>
-            <option value="true">Yes</option>
+            <option value="false">{t('settings.no')}</option>
+            <option value="true">{t('settings.yes')}</option>
           </select>
         </div>
       </div>
@@ -446,11 +446,11 @@ export function SettingsPage() {
 
           <div className="form-row">
             <div className="form-group">
-              <label>Google Client ID</label>
+              <label>{t('settings.gdClientId')}</label>
               <input value={gdriveClientId} onChange={(e) => setGdriveClientId(e.target.value)} placeholder="xxxxxxxx.apps.googleusercontent.com" />
             </div>
             <div className="form-group">
-              <label>Google Client Secret</label>
+              <label>{t('settings.gdClientSecret')}</label>
               <input type="password" value={gdriveClientSecret} onChange={(e) => setGdriveClientSecret(e.target.value)} placeholder="GOCSPX-xxxxxxxx" />
             </div>
           </div>
@@ -523,7 +523,7 @@ export function SettingsPage() {
 
         <div className="about-app">
           <div className="about-app-name">Zoom Recording Downloader</div>
-          <div className="about-app-version">v1.1.0</div>
+          <div className="about-app-version">v1.3.0</div>
           <p className="about-app-desc">{t('about.description')}</p>
         </div>
 
@@ -551,10 +551,47 @@ export function SettingsPage() {
             GitHub — tronghv77/zoom_recording_downloader
           </a>
         </div>
+
+        <div className="about-share">
+          <h4>{t('about.share')}</h4>
+          <p className="about-share-desc">{t('about.shareDesc')}</p>
+          <div className="about-share-actions">
+            <button className="btn btn-primary" onClick={handleShareCopy}>
+              {shareCopied ? `✅ ${t('about.copied')}` : `📋 ${t('about.copyLink')}`}
+            </button>
+            <button className="btn" onClick={() => openShare(`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(RELEASE_URL)}`)}>
+              📘 {t('about.shareFb')}
+            </button>
+            <button className="btn" onClick={() => openShare(RELEASE_URL)}>
+              ⬇️ {t('about.downloadLatest')}
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   );
+
+  function openShare(url: string) {
+    if (isElectron && (api as any).system?.openExternal) {
+      (api as any).system.openExternal(url);
+    } else {
+      window.open(url, '_blank', 'noopener');
+    }
+  }
+
+  async function handleShareCopy() {
+    const text = `Zoom Recording Downloader — quản lý & tải bản ghi Zoom Cloud cho nhiều tài khoản, nhiều thiết bị. Tải về: ${RELEASE_URL}`;
+    try {
+      await navigator.clipboard.writeText(text);
+      setShareCopied(true);
+      setTimeout(() => setShareCopied(false), 3000);
+    } catch {
+      openShare(RELEASE_URL);
+    }
+  }
 }
+
+const RELEASE_URL = 'https://github.com/tronghv77/zoom_recording_downloader/releases/latest';
 
 function previewTemplate(template: string): string {
   return template

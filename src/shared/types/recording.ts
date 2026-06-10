@@ -21,6 +21,8 @@ export interface RenameRule {
   meetingId: string;
   startFrom: string; // 'HH:MM'
   startTo: string; // 'HH:MM'
+  dateFrom?: string; // optional 'YYYY-MM-DD' lower bound (local date)
+  dateTo?: string; // optional 'YYYY-MM-DD' upper bound (local date)
   targetName: string;
   color?: string; // optional accent color (hex) applied to matching recordings
   priority: number;

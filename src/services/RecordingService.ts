@@ -200,15 +200,27 @@ function matchRule(rules: RenameRule[], meetingId: string, startTime: string): R
   const d = new Date(startTime);
   if (isNaN(d.getTime())) return null;
   const recMinutes = d.getHours() * 60 + d.getMinutes();
+  const recDate = localDateStr(d); // 'YYYY-MM-DD' in machine-local time
 
   for (const rule of rules) {
     if (normalizeMeetingId(rule.meetingId) !== recId) continue;
     const from = hhmmToMinutes(rule.startFrom);
     const to = hhmmToMinutes(rule.startTo);
     if (from === null || to === null) continue;
-    if (recMinutes >= from && recMinutes <= to) return rule;
+    if (recMinutes < from || recMinutes > to) continue;
+    // Optional date-range bounds (the period the class runs)
+    if (rule.dateFrom && recDate < rule.dateFrom) continue;
+    if (rule.dateTo && recDate > rule.dateTo) continue;
+    return rule;
   }
   return null;
+}
+
+function localDateStr(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
 }
 
 function hhmmToMinutes(hhmm: string): number | null {
