@@ -79,13 +79,14 @@ export class DownloadRepository {
     // Build folder path from template
     const template = folderTemplate || '{topic}';
     const vn = toVNTime(String(file.start_time || new Date().toISOString()));
+    // Use global replace so templates may repeat a token (e.g. "{topic}/... - {topic}")
     const folderPath = template
-      .replace('{account}', sanitizeFileName(String(file.account_name || 'Unknown')))
-      .replace('{topic}', sanitizeFileName(effectiveName))
-      .replace('{year}', vn.year)
-      .replace('{month}', vn.month)
-      .replace('{date}', vn.date)
-      .replace('{time}', vn.time);
+      .replace(/\{account\}/g, sanitizeFileName(String(file.account_name || 'Unknown')))
+      .replace(/\{topic\}/g, sanitizeFileName(effectiveName))
+      .replace(/\{year\}/g, vn.year)
+      .replace(/\{month\}/g, vn.month)
+      .replace(/\{date\}/g, vn.date)
+      .replace(/\{time\}/g, vn.time);
 
     const datePrefix = `${vn.date.split('-').reverse().join('_')}`;
     const destinationPath = `${options.destinationDir}/${folderPath}/${datePrefix} ${safeType}.${ext}`;

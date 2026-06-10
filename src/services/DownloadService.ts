@@ -29,15 +29,13 @@ export class DownloadService implements IDownloadService {
   }
 
   // On app startup, tasks left as 'downloading' from a previous session (the app
-  // was closed/crashed mid-download) are stuck — the in-memory queue is empty.
-  // Reset them to 'queued' so they resume automatically.
-  recoverInterrupted(): number {
+  // was closed/crashed mid-download) can't continue on their own. Mark them as
+  // 'paused' so the user can choose to resume them — do NOT auto-resume.
+  pauseInterrupted(): number {
     const stuck = this.downloadRepo.findByStatus('downloading');
     for (const t of stuck) {
-      this.downloadRepo.resetProgress(t.id);
-      this.downloadRepo.updateStatus(t.id, 'queued');
+      this.downloadRepo.updateStatus(t.id, 'paused');
     }
-    if (stuck.length > 0) this.processQueue();
     return stuck.length;
   }
 

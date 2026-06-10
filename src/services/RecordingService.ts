@@ -90,12 +90,13 @@ export class RecordingService implements IRecordingService {
   async rename(id: string, newTopic: string, _updateCloud?: boolean): Promise<void> {
     const recording = await this.getById(id);
     if (!recording) throw new Error(`Recording not found: ${id}`);
-    this.recordingRepo.updateCustomName(id, newTopic);
+    // Manual rename — mark it protected so rule re-application won't clear it.
+    this.recordingRepo.updateCustomName(id, newTopic, true);
   }
 
   // Clear the local custom name → revert to the original Zoom topic.
   async clearCustomName(id: string): Promise<void> {
-    this.recordingRepo.updateCustomName(id, null);
+    this.recordingRepo.updateCustomName(id, null, false);
   }
 
   // === Auto-rename rules ===
@@ -124,24 +125,34 @@ export class RecordingService implements IRecordingService {
   applyRenameRules(): number {
     if (!this.renameRuleRepo) return 0;
     const rules = this.renameRuleRepo.findAll().filter((r) => r.enabled);
-    if (rules.length === 0) return 0;
+    // Note: do NOT early-return on 0 rules — we still need to clear stale
+    // rule-applied names (e.g. after deleting the last rule).
 
     const recordings = this.recordingRepo.findAllBasic();
     let changed = 0;
     for (const rec of recordings) {
       const rule = matchRule(rules, rec.meetingId, rec.startTime);
-      if (!rule) continue;
-      let touched = false;
-      if (rule.targetName && rule.targetName !== rec.customName) {
-        this.recordingRepo.updateCustomName(rec.id, rule.targetName);
-        touched = true;
+
+      if (rule) {
+        // Matches a rule → apply its name + color (overrides a previous rule name).
+        let touched = false;
+        if (rule.targetName && rule.targetName !== rec.customName) {
+          this.recordingRepo.updateCustomName(rec.id, rule.targetName, false);
+          touched = true;
+        }
+        const newColor = rule.color || null;
+        if (newColor !== rec.customColor) {
+          this.recordingRepo.updateCustomColor(rec.id, newColor);
+          touched = true;
+        }
+        if (touched) changed++;
+      } else if (!rec.nameIsManual && (rec.customName || rec.customColor)) {
+        // No rule matches AND the name wasn't typed by the user → it's a stale
+        // rule name from a rule that changed/was deleted. Revert to the original.
+        this.recordingRepo.updateCustomName(rec.id, null, false);
+        this.recordingRepo.updateCustomColor(rec.id, null);
+        changed++;
       }
-      const newColor = rule.color || null;
-      if (newColor && newColor !== rec.customColor) {
-        this.recordingRepo.updateCustomColor(rec.id, newColor);
-        touched = true;
-      }
-      if (touched) changed++;
     }
     return changed;
   }

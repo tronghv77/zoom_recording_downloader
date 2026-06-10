@@ -33,10 +33,15 @@ function getServices() {
     schedulerService = new SchedulerService(recordingService, downloadService, accountService, settingsRepo, recordingRepo);
     googleDriveService = new GoogleDriveService(settingsRepo, downloadRepo);
 
-    // Apply the saved "max concurrent downloads" setting and resume any
-    // downloads interrupted by a previous app close/crash.
+    // Apply the saved "max concurrent downloads" setting. Downloads interrupted
+    // by a previous app close/crash are set to 'paused' (NOT auto-resumed) — the
+    // user decides whether to continue them via the "Resume" button.
     downloadService.setMaxConcurrent(settingsRepo.getAll().maxConcurrentDownloads);
-    downloadService.recoverInterrupted();
+    downloadService.pauseInterrupted();
+
+    // Re-apply rename rules on startup so stale names (from a rule that was
+    // edited/deleted in a previous session) are reconciled automatically.
+    try { recordingService.applyRenameRules(); } catch { /* ignore */ }
 
     // Auto-start scheduler if enabled
     const schedulerConfig = schedulerService.getConfig();

@@ -50,6 +50,10 @@ function recFile(db, id, recId, type) {
   // Default template still produces a different (date-time) structure
   const taskDefault = dlRepo.createTask('fA', { destinationDir: dlDir }, '{account}/{year}-{month}/{date} {time} - {topic}');
   ok('default template includes year-month folder', /2026-06/.test(taskDefault.destinationPath), taskDefault.destinationPath);
+  // New template with TWO {topic} tokens — both must be replaced (global replace)
+  const taskTwoTopic = dlRepo.createTask('fA', { destinationDir: dlDir }, '{account}/{topic}/{date} {time} - {topic}');
+  ok('repeated {topic} fully replaced (no literal "{topic}" left)', !taskTwoTopic.destinationPath.includes('{topic}'), taskTwoTopic.destinationPath);
+  ok('repeated {topic} → name appears in both folder and leaf', (taskTwoTopic.destinationPath.match(/Thau Hieu Con Tre - Ca Sang/g) || []).length >= 2, taskTwoTopic.destinationPath);
 
   // ============ Re-sync preserves custom name ============
   console.log('\n[Re-sync] custom name survives a re-sync of the same recording');
@@ -71,6 +75,31 @@ function recFile(db, id, recId, type) {
   eq('June recording → green color', recRepo.findById('rJun').customColor, '#10b981');
   eq('May recording → "Khoa Thang 5"', recRepo.findById('rMay').customName, 'Khoa Thang 5');
   eq('May recording → pink color', recRepo.findById('rMay').customColor, '#ec4899');
+
+  // ============ Editing a rule clears stale names; manual names are protected ============
+  console.log('\n[Rules edit] old rule names cleared on edit; manual renames protected');
+  db.run(`INSERT INTO recordings (id,account_id,meeting_id,uuid,meeting_topic,host_email,start_time,duration,total_size)
+          VALUES ('eJun','acc1','99001','ue1','goc1','h','2026-06-08T05:00:00',60,1)`);
+  db.run(`INSERT INTO recordings (id,account_id,meeting_id,uuid,meeting_topic,host_email,start_time,duration,total_size)
+          VALUES ('eMay','acc1','99001','ue2','goc2','h','2026-05-08T05:00:00',60,1)`);
+  db.run(`INSERT INTO recordings (id,account_id,meeting_id,uuid,meeting_topic,host_email,start_time,duration,total_size)
+          VALUES ('eMan','acc1','99002','ue3','gocMan','h','2026-06-08T05:00:00',60,1)`);
+  recRepo.updateCustomName('eMan', 'Tên Tôi Tự Đặt', true); // manual rename (protected)
+  const rEdit = ruleRepo.create({ meetingId: '99001', startFrom: '04:00', startTo: '06:00', targetName: 'Cô Diễm', color: '#f59e0b', priority: 0, enabled: true });
+  svc.applyRenameRules();
+  eq('before edit: June got rule name', recRepo.findById('eJun').customName, 'Cô Diễm');
+  eq('before edit: May got rule name', recRepo.findById('eMay').customName, 'Cô Diễm');
+  // Now EDIT the rule: rename + restrict to May only
+  ruleRepo.update(rEdit.id, { targetName: 'Cô Diễm - T5', dateFrom: '2026-05-01', dateTo: '2026-05-31' });
+  svc.applyRenameRules();
+  eq('after edit: May → new name', recRepo.findById('eMay').customName, 'Cô Diễm - T5');
+  eq('after edit: June (no longer matches) → OLD name CLEARED', recRepo.findById('eJun').customName, undefined);
+  eq('manual rename is PROTECTED (untouched)', recRepo.findById('eMan').customName, 'Tên Tôi Tự Đặt');
+  // Deleting the rule clears the names it had applied (manual still protected)
+  ruleRepo.delete(rEdit.id);
+  svc.applyRenameRules();
+  eq('after deleting rule: applied name cleared', recRepo.findById('eMay').customName, undefined);
+  eq('after deleting rule: manual still protected', recRepo.findById('eMan').customName, 'Tên Tôi Tự Đặt');
 
   // ============ #2 — Download status transitions (resume/retry data) ============
   console.log('\n[#2] Download task status transitions (resume/retry)');
@@ -138,13 +167,14 @@ function recFile(db, id, recId, type) {
   await robSvc.cancel(tSz.id);
   ok('cancel removes the leftover file', !fs.existsSync(tSz.destinationPath));
 
-  // #1 Restart recovery — a task stuck as "downloading" gets recovered
+  // #1 Restart handling — a task stuck as "downloading" is PAUSED, not auto-resumed
   db.run(`INSERT INTO recordings (id,account_id,meeting_id,uuid,meeting_topic,host_email,start_time,duration,total_size)
           VALUES ('rStuck','acc1','555','uStuck','stuck','h','2026-06-08T05:08:00',60,1)`);
   recFile(db, 'fStuck', 'rStuck', 'shared_screen');
   const tStuck = dlRepo.createTask('fStuck', { destinationDir: dlDir }, '{topic}');
   dlRepo.updateStatus(tStuck.id, 'downloading'); // simulate app closed mid-download
-  ok('recoverInterrupted picks up the stuck download', robSvc.recoverInterrupted() >= 1);
+  ok('pauseInterrupted finds the stuck download', robSvc.pauseInterrupted() >= 1);
+  eq('interrupted download is PAUSED (not auto-resumed)', dlRepo.findById(tStuck.id).status, 'paused');
 
   // ============ Multi-delete (local) ============
   console.log('\n[Multi-delete] deleteMany removes recordings + their files/tasks');

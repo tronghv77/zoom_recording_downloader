@@ -10,3 +10,6 @@ Thumbs.db
 *.log
 release/
 dist/
+
+# Local analysis tool (reads personal DB path)
+scripts/analyze-gaps.cjs

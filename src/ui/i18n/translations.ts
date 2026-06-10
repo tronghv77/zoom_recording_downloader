@@ -228,6 +228,7 @@ export const translations = {
   'settings.tplAccYmTopic': { vi: 'Tài khoản / Năm-Tháng / Chủ đề', en: 'Account / Year-Month / Topic' },
   'settings.tplAccYmDtTopic': { vi: 'Tài khoản / Năm-Tháng / Ngày Giờ - Chủ đề', en: 'Account / Year-Month / Date Time - Topic' },
   'settings.tplAccTopicDt': { vi: 'Tài khoản / Chủ đề / Ngày Giờ', en: 'Account / Topic / Date Time' },
+  'settings.tplAccTopicDtTopic': { vi: 'Tài khoản / Chủ đề / Ngày Giờ - Chủ đề', en: 'Account / Topic / Date Time - Topic' },
   'settings.tplAccTopic': { vi: 'Tài khoản / Chủ đề', en: 'Account / Topic' },
   'settings.tplYmTopic': { vi: 'Năm-Tháng / Chủ đề', en: 'Year-Month / Topic' },
   'settings.tplTopic': { vi: 'Chỉ Chủ đề', en: 'Topic only' },

@@ -16,6 +16,7 @@ const FOLDER_TEMPLATES: { value: string; labelKey: TranslationKey }[] = [
   { value: '{account}/{year}-{month}/{topic}', labelKey: 'settings.tplAccYmTopic' },
   { value: '{account}/{year}-{month}/{date} {time} - {topic}', labelKey: 'settings.tplAccYmDtTopic' },
   { value: '{account}/{topic}/{date} {time}', labelKey: 'settings.tplAccTopicDt' },
+  { value: '{account}/{topic}/{date} {time} - {topic}', labelKey: 'settings.tplAccTopicDtTopic' },
   { value: '{account}/{topic}', labelKey: 'settings.tplAccTopic' },
   { value: '{year}-{month}/{topic}', labelKey: 'settings.tplYmTopic' },
   { value: '{topic}', labelKey: 'settings.tplTopic' },
@@ -77,7 +78,7 @@ export function SettingsPage() {
       });
       const data = await res.json();
       const latestVersion = (data.tag_name || '').replace(/^v/, '');
-      const currentVersion = '1.3.0';
+      const currentVersion = '1.3.1';
       const exeAsset = data.assets?.find((a: any) => a.name.includes('Setup'));
       const downloadUrl = exeAsset?.browser_download_url || data.html_url || '';
 
@@ -523,7 +524,7 @@ export function SettingsPage() {
 
         <div className="about-app">
           <div className="about-app-name">Zoom Recording Downloader</div>
-          <div className="about-app-version">v1.3.0</div>
+          <div className="about-app-version">v1.3.1</div>
           <p className="about-app-desc">{t('about.description')}</p>
         </div>
 
@@ -595,10 +596,10 @@ const RELEASE_URL = 'https://github.com/tronghv77/zoom_recording_downloader/rele
 
 function previewTemplate(template: string): string {
   return template
-    .replace('{account}', 'FEMI')
-    .replace('{topic}', 'Workshop AI')
-    .replace('{year}', '2026')
-    .replace('{month}', '03')
-    .replace('{date}', '2026-03-17')
-    .replace('{time}', '14-30');
+    .replace(/\{account\}/g, 'FEMI')
+    .replace(/\{topic\}/g, 'Workshop AI')
+    .replace(/\{year\}/g, '2026')
+    .replace(/\{month\}/g, '03')
+    .replace(/\{date\}/g, '2026-03-17')
+    .replace(/\{time\}/g, '14-30');
 }

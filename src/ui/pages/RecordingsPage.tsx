@@ -1397,6 +1397,7 @@ function RulesModal({ onClose, onApply, applying }: { onClose: () => void; onApp
       setAddDraft(emptyDraft());
       setAddErrors({});
       load();
+      onApply(); // re-evaluate recordings so the new rule takes effect immediately
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -1426,6 +1427,7 @@ function RulesModal({ onClose, onApply, applying }: { onClose: () => void; onApp
       await (api as any).renameRules.update(editId, editDraft);
       closeEdit();
       load();
+      onApply(); // re-apply so old names from the previous rule version are cleared
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -1444,6 +1446,7 @@ function RulesModal({ onClose, onApply, applying }: { onClose: () => void; onApp
       if (editId === rule.id) closeEdit();
       await (api as any).renameRules.delete(rule.id);
       load();
+      onApply(); // clear names that the deleted rule had applied
     } catch (e: any) { setError(e.message); }
   }
 

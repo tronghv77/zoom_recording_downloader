@@ -181,9 +181,10 @@ export class RecordingRepository {
   }
 
   // Local-only custom name. Pass null/empty to clear (fall back to original topic).
-  updateCustomName(id: string, customName: string | null): void {
+  // isManual=true marks it as a user-typed name (protected from rule auto-clear).
+  updateCustomName(id: string, customName: string | null, isManual = false): void {
     const value = customName && customName.trim() ? customName.trim() : null;
-    this.db.run('UPDATE recordings SET custom_name = ? WHERE id = ?', [value, id]);
+    this.db.run('UPDATE recordings SET custom_name = ?, name_is_manual = ? WHERE id = ?', [value, isManual ? 1 : 0, id]);
     saveDatabase();
   }
 
@@ -195,8 +196,8 @@ export class RecordingRepository {
   }
 
   // Lightweight list of all recordings for the auto-rename rule engine.
-  findAllBasic(): Array<{ id: string; meetingId: string; startTime: string; customName: string | null; customColor: string | null }> {
-    const result = this.db.exec('SELECT id, meeting_id, start_time, custom_name, custom_color FROM recordings');
+  findAllBasic(): Array<{ id: string; meetingId: string; startTime: string; customName: string | null; customColor: string | null; nameIsManual: boolean }> {
+    const result = this.db.exec('SELECT id, meeting_id, start_time, custom_name, custom_color, name_is_manual FROM recordings');
     if (result.length === 0) return [];
     return result[0].values.map((v) => ({
       id: v[0] as string,
@@ -204,6 +205,7 @@ export class RecordingRepository {
       startTime: v[2] as string,
       customName: (v[3] as string) || null,
       customColor: (v[4] as string) || null,
+      nameIsManual: (v[5] as number) === 1,
     }));
   }
 
